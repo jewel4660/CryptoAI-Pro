@@ -1,0 +1,17 @@
+CryptoAI-Pro — MOBILE GITHUB UPLOAD
+
+1. Upload the project folders/files to a GitHub repository.
+2. If your phone does not show the hidden ".github" folder, use:
+   GITHUB_ACTIONS/android-debug.yml
+3. In GitHub, create a new file with this exact path:
+   .github/workflows/android-debug.yml
+4. Open GITHUB_ACTIONS/android-debug.yml, copy all its contents, and paste them
+   into the new GitHub file, then Commit changes.
+5. Open GitHub Actions -> Build Android Debug APK -> Run workflow.
+6. After the build finishes, download the artifact named:
+   cryptoai-debug-apk
+
+IMPORTANT:
+- Do not upload the ZIP file itself as the project.
+- Upload the contents of this extracted project.
+- The backend must be deployed online separately for live market data.

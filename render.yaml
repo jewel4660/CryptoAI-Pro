@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: cryptoai-pro-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: CORS_ORIGIN
+        value: "*"
