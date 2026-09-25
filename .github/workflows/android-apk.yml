@@ -17,7 +17,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -26,39 +26,28 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: 'platform-tools'
+          packages: |
+            platform-tools
+            platforms;android-35
+            build-tools;35.0.0
 
-      - name: Find Gradle project
-        run: |
-          echo "Searching for Gradle wrapper..."
-          find . -name gradlew -type f -print
-
-      - name: Make Gradle executable
-        run: |
-          find . -name gradlew -type f -exec chmod +x {} \;
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
 
       - name: Build Debug APK
+        working-directory: android
         run: |
-          GRADLEW=$(find . -name gradlew -type f | head -n 1)
-
-          if [ -z "$GRADLEW" ]; then
-            echo "ERROR: gradlew not found"
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$GRADLEW")
-          cd "$PROJECT_DIR"
-
-          echo "Building from: $PROJECT_DIR"
-          ./gradlew assembleDebug --stacktrace
+          gradle :app:assembleDebug --stacktrace
 
       - name: Find APK
         run: |
-          find . -type f -name "*.apk" -print
+          find android -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: cryptoai-debug-apk
-          path: "**/build/outputs/apk/**/*.apk"
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
