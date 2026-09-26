@@ -9,6 +9,17 @@ export type Candle = {
   volume: number;
 };
 
+export type TickerData = {
+  symbol: string;
+  timestamp: number;
+  last: number;
+  bid: number;
+  ask: number;
+  high: number;
+  low: number;
+  volume: number;
+};
+
 const exchange = new ccxt.binance({
   enableRateLimit: true,
   options: {
@@ -40,11 +51,14 @@ export async function getCandles(
     }));
 }
 
-export async function getTicker(symbol: string) {
+export async function getTicker(
+  symbol: string
+): Promise<TickerData> {
   const ticker = await exchange.fetchTicker(symbol);
 
   return {
     symbol,
+    timestamp: Number(ticker.timestamp ?? Date.now()),
     last: Number(ticker.last ?? 0),
     bid: Number(ticker.bid ?? 0),
     ask: Number(ticker.ask ?? 0),
@@ -54,8 +68,11 @@ export async function getTicker(symbol: string) {
   };
 }
 
-export async function getPrice(symbol: string): Promise<number> {
+export async function getPrice(
+  symbol: string
+): Promise<number> {
   const ticker = await exchange.fetchTicker(symbol);
+
   return Number(ticker.last ?? 0);
 }
 
