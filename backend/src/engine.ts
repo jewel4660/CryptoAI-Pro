@@ -1,5 +1,7 @@
 import crypto from "node:crypto";
+
 import { Candle, Signal } from "./types.js";
+
 import {
   ema,
   rsi,
@@ -10,33 +12,58 @@ import {
   closes,
 } from "./indicators.js";
 
-const clamp = (x: number): number =>
-  Math.max(
+/* =========================================================
+   HELPERS
+   ========================================================= */
+
+const clamp = (x: number): number => {
+  if (!Number.isFinite(x)) {
+    return 0;
+  }
+
+  return Math.max(
     0,
-    Math.min(100, Number.isFinite(x) ? x : 0)
+    Math.min(100, x)
   );
+};
 
 const round = (
   x: number,
   digits = 8
 ): number => {
-  if (!Number.isFinite(x)) return 0;
+  if (!Number.isFinite(x)) {
+    return 0;
+  }
 
   const p = 10 ** digits;
 
-  return Math.round(x * p) / p;
+  return (
+    Math.round(x * p) / p
+  );
 };
 
-const avg = (arr: number[]): number => {
-  if (!arr.length) return 0;
+const avg = (
+  arr: number[]
+): number => {
+  if (
+    !Array.isArray(arr) ||
+    arr.length === 0
+  ) {
+    return 0;
+  }
 
   return (
     arr.reduce(
-      (sum, value) => sum + value,
+      (sum, value) =>
+        sum + value,
       0
     ) / arr.length
   );
 };
+
+/* =========================================================
+   ANALYZE
+   ========================================================= */
 
 export function analyze(
   symbol: string,
@@ -44,76 +71,128 @@ export function analyze(
   balance = 1000,
   riskPercent = 1
 ): Signal {
-  // ==========================================
-  // VALIDATION
-  // ==========================================
+  /* =======================================================
+     VALIDATION
+     ======================================================= */
 
   if (
     !Array.isArray(c) ||
     c.length < 220
   ) {
-    throw new Error("INSUFFICIENT_DATA");
+    throw new Error(
+      "INSUFFICIENT_DATA"
+    );
   }
 
   const data = c
     .filter(
       (x) =>
-        Number.isFinite(x.open) &&
-        Number.isFinite(x.high) &&
-        Number.isFinite(x.low) &&
-        Number.isFinite(x.close) &&
-        Number.isFinite(x.volume)
+        Number.isFinite(
+          x.timestamp
+        ) &&
+        Number.isFinite(
+          x.open
+        ) &&
+        Number.isFinite(
+          x.high
+        ) &&
+        Number.isFinite(
+          x.low
+        ) &&
+        Number.isFinite(
+          x.close
+        ) &&
+        Number.isFinite(
+          x.volume
+        )
     )
     .sort(
       (a, b) =>
-        a.timestamp - b.timestamp
+        a.timestamp -
+        b.timestamp
     );
 
-  if (data.length < 220) {
-    throw new Error("INSUFFICIENT_DATA");
+  if (
+    data.length < 220
+  ) {
+    throw new Error(
+      "INSUFFICIENT_DATA"
+    );
   }
 
-  // ==========================================
-  // LAST CANDLE
-  // ==========================================
+  /* =======================================================
+     LAST CANDLE
+     ======================================================= */
 
   const last =
     data[data.length - 1];
 
-  const close = last.close;
-  const high = last.high;
-  const low = last.low;
+  if (!last) {
+    throw new Error(
+      "NO_LAST_CANDLE"
+    );
+  }
 
-  // ==========================================
-  // CLOSE PRICES
-  // ==========================================
+  const close =
+    last.close;
 
-  const closePrices = closes(data);
+  const high =
+    last.high;
 
-  // ==========================================
-  // INDICATORS
-  // ==========================================
+  const low =
+    last.low;
+
+  /* =======================================================
+     CLOSE PRICES
+     ======================================================= */
+
+  const closePrices =
+    closes(data);
+
+  /* =======================================================
+     INDICATORS
+     ======================================================= */
 
   const ema20 =
-    ema(closePrices, 20);
+    ema(
+      closePrices,
+      20
+    );
 
   const ema50 =
-    ema(closePrices, 50);
+    ema(
+      closePrices,
+      50
+    );
 
   const ema100 =
-    ema(closePrices, 100);
+    ema(
+      closePrices,
+      100
+    );
 
   const ema200 =
-    ema(closePrices, 200);
+    ema(
+      closePrices,
+      200
+    );
 
   const rsi14 =
-    rsi(closePrices, 14);
+    rsi(
+      closePrices,
+      14
+    );
 
   const atr14 =
-    atr(data, 14);
+    atr(
+      data,
+      14
+    );
 
   const macdData =
-    macd(closePrices);
+    macd(
+      closePrices
+    );
 
   const bb =
     bollinger(
@@ -123,64 +202,120 @@ export function analyze(
     );
 
   const vwapValue =
-    vwap(data);
+    vwap(
+      data,
+      50
+    );
 
-  // ==========================================
-  // LATEST INDICATOR VALUES
-  // ==========================================
+  /* =======================================================
+     LATEST INDICATOR VALUES
+     ======================================================= */
 
   const E20 =
-    ema20[ema20.length - 1] ??
-    close;
+    ema20.length > 0
+      ? (
+          ema20[
+            ema20.length - 1
+          ] ?? close
+        )
+      : close;
 
   const E50 =
-    ema50[ema50.length - 1] ??
-    close;
+    ema50.length > 0
+      ? (
+          ema50[
+            ema50.length - 1
+          ] ?? close
+        )
+      : close;
 
   const E100 =
-    ema100[ema100.length - 1] ??
-    close;
+    ema100.length > 0
+      ? (
+          ema100[
+            ema100.length - 1
+          ] ?? close
+        )
+      : close;
 
   const E200 =
-    ema200[ema200.length - 1] ??
-    close;
+    ema200.length > 0
+      ? (
+          ema200[
+            ema200.length - 1
+          ] ?? close
+        )
+      : close;
 
   const RSI =
-    rsi14[rsi14.length - 1] ??
-    50;
+    rsi14.length > 0
+      ? (
+          rsi14[
+            rsi14.length - 1
+          ] ?? 50
+        )
+      : 50;
 
   const ATR =
-    atr14[atr14.length - 1] ??
-    close * 0.01;
+    atr14.length > 0
+      ? (
+          atr14[
+            atr14.length - 1
+          ] ??
+          close * 0.01
+        )
+      : close * 0.01;
 
   const MACD =
-    macdData.macd[
-      macdData.macd.length - 1
-    ] ?? 0;
+    macdData.macd.length > 0
+      ? (
+          macdData.macd[
+            macdData.macd.length -
+              1
+          ] ?? 0
+        )
+      : 0;
 
   const MACDSignal =
-    macdData.signal[
-      macdData.signal.length - 1
-    ] ?? 0;
+    macdData.signal.length > 0
+      ? (
+          macdData.signal[
+            macdData.signal.length -
+              1
+          ] ?? 0
+        )
+      : 0;
 
   const BBUpper =
-    bb.upper[
-      bb.upper.length - 1
-    ] ?? close;
+    bb.upper.length > 0
+      ? (
+          bb.upper[
+            bb.upper.length - 1
+          ] ?? close
+        )
+      : close;
 
   const BBMiddle =
-    bb.middle[
-      bb.middle.length - 1
-    ] ?? close;
+    bb.middle.length > 0
+      ? (
+          bb.middle[
+            bb.middle.length - 1
+          ] ?? close
+        )
+      : close;
 
   const BBLower =
-    bb.lower[
-      bb.lower.length - 1
-    ] ?? close;
+    bb.lower.length > 0
+      ? (
+          bb.lower[
+            bb.lower.length - 1
+          ] ?? close
+        )
+      : close;
 
-  // ==========================================
-  // PRICE STRUCTURE
-  // ==========================================
+  /* =======================================================
+     PRICE STRUCTURE
+     ======================================================= */
 
   const recent =
     data.slice(-20);
@@ -220,16 +355,16 @@ export function analyze(
         )
       : recentLow;
 
-  // ==========================================
-  // SCORE
-  // ==========================================
+  /* =======================================================
+     SCORE
+     ======================================================= */
 
   let longScore = 0;
   let shortScore = 0;
 
-  // ==========================================
-  // EMA TREND
-  // ==========================================
+  /* =======================================================
+     EMA TREND
+     ======================================================= */
 
   if (close > E20) {
     longScore += 7;
@@ -255,19 +390,28 @@ export function analyze(
     shortScore += 6;
   }
 
-  // ==========================================
-  // VWAP
-  // ==========================================
+  /* =======================================================
+     VWAP
+     ======================================================= */
 
-  if (close > vwapValue) {
-    longScore += 7;
-  } else {
-    shortScore += 7;
+  if (
+    Number.isFinite(
+      vwapValue
+    )
+  ) {
+    if (
+      close >
+      vwapValue
+    ) {
+      longScore += 7;
+    } else {
+      shortScore += 7;
+    }
   }
 
-  // ==========================================
-  // RSI
-  // ==========================================
+  /* =======================================================
+     RSI
+     ======================================================= */
 
   if (
     RSI >= 55 &&
@@ -283,7 +427,9 @@ export function analyze(
     shortScore += 8;
   }
 
-  // Extreme RSI protection
+  /* =======================================================
+     EXTREME RSI PROTECTION
+     ======================================================= */
 
   if (RSI > 78) {
     shortScore += 3;
@@ -295,35 +441,43 @@ export function analyze(
     shortScore -= 3;
   }
 
-  // ==========================================
-  // MACD
-  // ==========================================
+  /* =======================================================
+     MACD
+     ======================================================= */
 
-  if (MACD > MACDSignal) {
+  if (
+    MACD >
+    MACDSignal
+  ) {
     longScore += 9;
   } else {
     shortScore += 9;
   }
 
-  // ==========================================
-  // BOLLINGER
-  // ==========================================
+  /* =======================================================
+     BOLLINGER
+     ======================================================= */
 
-  if (close > BBMiddle) {
+  if (
+    close >
+    BBMiddle
+  ) {
     longScore += 4;
   } else {
     shortScore += 4;
   }
 
-  // ==========================================
-  // BREAK OF STRUCTURE
-  // ==========================================
+  /* =======================================================
+     BREAK OF STRUCTURE
+     ======================================================= */
 
   const BOSLong =
-    close > previousHigh;
+    close >
+    previousHigh;
 
   const BOSShort =
-    close < previousLow;
+    close <
+    previousLow;
 
   if (BOSLong) {
     longScore += 10;
@@ -333,17 +487,21 @@ export function analyze(
     shortScore += 10;
   }
 
-  // ==========================================
-  // LIQUIDITY SWEEP
-  // ==========================================
+  /* =======================================================
+     LIQUIDITY SWEEP
+     ======================================================= */
 
   const bullishSweep =
-    low < recentLow &&
-    close > recentLow;
+    low <
+      recentLow &&
+    close >
+      recentLow;
 
   const bearishSweep =
-    high > recentHigh &&
-    close < recentHigh;
+    high >
+      recentHigh &&
+    close <
+      recentHigh;
 
   if (bullishSweep) {
     longScore += 8;
@@ -353,51 +511,66 @@ export function analyze(
     shortScore += 8;
   }
 
-  // ==========================================
-  // VOLUME
-  // ==========================================
+  /* =======================================================
+     VOLUME
+     ======================================================= */
 
   const volumeWindow =
-    data.slice(-21, -1);
+    data.slice(
+      -21,
+      -1
+    );
 
   const avgVolume =
     avg(
       volumeWindow.map(
-        (x) => x.volume
+        (x) =>
+          x.volume
       )
     );
 
   const volumeRatio =
     avgVolume > 0
-      ? last.volume / avgVolume
+      ? last.volume /
+        avgVolume
       : 1;
 
-  if (volumeRatio >= 1.5) {
-    if (close >= last.open) {
+  if (
+    volumeRatio >= 1.5
+  ) {
+    if (
+      close >=
+      last.open
+    ) {
       longScore += 5;
     } else {
       shortScore += 5;
     }
   }
 
-  // ==========================================
-  // FINAL SCORE
-  // ==========================================
+  /* =======================================================
+     FINAL SCORE
+     ======================================================= */
 
   longScore =
-    clamp(longScore);
+    clamp(
+      longScore
+    );
 
   shortScore =
-    clamp(shortScore);
+    clamp(
+      shortScore
+    );
 
   const difference =
     Math.abs(
-      longScore - shortScore
+      longScore -
+        shortScore
     );
 
-  // ==========================================
-  // DIRECTION
-  // ==========================================
+  /* =======================================================
+     DIRECTION
+     ======================================================= */
 
   let direction:
     | "LONG"
@@ -409,20 +582,23 @@ export function analyze(
     longScore >
       shortScore + 8
   ) {
-    direction = "LONG";
+    direction =
+      "LONG";
   } else if (
     shortScore >= 70 &&
     shortScore >
       longScore + 8
   ) {
-    direction = "SHORT";
+    direction =
+      "SHORT";
   } else {
-    direction = "NO_TRADE";
+    direction =
+      "NO_TRADE";
   }
 
-  // ==========================================
-  // CONFIDENCE
-  // ==========================================
+  /* =======================================================
+     CONFIDENCE
+     ======================================================= */
 
   const confidence =
     clamp(
@@ -431,54 +607,74 @@ export function analyze(
         shortScore
       ) *
         0.75 +
-        difference * 0.25
+        difference *
+          0.25
     );
 
   const probabilityEstimate =
     clamp(
       50 +
-        difference * 0.5
+        difference *
+          0.5
     );
 
-  // ==========================================
-  // ATR
-  // ==========================================
+  /* =======================================================
+     ATR SAFE
+     ======================================================= */
 
   const atrSafe =
-    Number.isFinite(ATR) &&
+    Number.isFinite(
+      ATR
+    ) &&
     ATR > 0
       ? ATR
       : close * 0.01;
 
-  // ==========================================
-  // ENTRY / STOP / TARGET
-  // ==========================================
+  /* =======================================================
+     ENTRY / STOP / TARGET
+     ======================================================= */
 
-  let entryLow = close;
-  let entryHigh = close;
-  let preferredEntry = close;
+  let entryLow =
+    close;
 
-  let stopLoss = close;
+  let entryHigh =
+    close;
 
-  let takeProfit1 = close;
-  let takeProfit2 = close;
-  let takeProfit3 = close;
+  let preferredEntry =
+    close;
 
-  // ==========================================
-  // LONG
-  // ==========================================
+  let stopLoss =
+    close;
 
-  if (direction === "LONG") {
+  let takeProfit1 =
+    close;
+
+  let takeProfit2 =
+    close;
+
+  let takeProfit3 =
+    close;
+
+  /* =======================================================
+     LONG
+     ======================================================= */
+
+  if (
+    direction ===
+    "LONG"
+  ) {
     entryLow =
       Math.max(
         0,
         close -
-          atrSafe * 0.25
+          atrSafe *
+            0.25
       );
 
     entryHigh =
       close +
-      atrSafe * 0.15;
+      atrSafe *
+        0.15;
 
     preferredEntry =
       (entryLow +
@@ -489,7 +685,8 @@ export function analyze(
       Math.min(
         recentLow,
         preferredEntry -
-          atrSafe * 1.5
+          atrSafe *
+            1.5
       );
 
     const riskDistance =
@@ -501,32 +698,40 @@ export function analyze(
 
     takeProfit1 =
       preferredEntry +
-      riskDistance * 1.5;
+      riskDistance *
+        1.5;
 
     takeProfit2 =
       preferredEntry +
-      riskDistance * 2.5;
+      riskDistance *
+        2.5;
 
     takeProfit3 =
       preferredEntry +
-      riskDistance * 4;
+      riskDistance *
+        4;
   }
 
-  // ==========================================
-  // SHORT
-  // ==========================================
+  /* =======================================================
+     SHORT
+     ======================================================= */
 
-  if (direction === "SHORT") {
+  if (
+    direction ===
+    "SHORT"
+  ) {
     entryLow =
       Math.max(
         0,
         close -
-          atrSafe * 0.15
+          atrSafe *
+            0.15
       );
 
     entryHigh =
       close +
-      atrSafe * 0.25;
+      atrSafe *
+        0.25;
 
     preferredEntry =
       (entryLow +
@@ -537,7 +742,8 @@ export function analyze(
       Math.max(
         recentHigh,
         preferredEntry +
-          atrSafe * 1.5
+          atrSafe *
+            1.5
       );
 
     const riskDistance =
@@ -549,34 +755,40 @@ export function analyze(
 
     takeProfit1 =
       preferredEntry -
-      riskDistance * 1.5;
+      riskDistance *
+        1.5;
 
     takeProfit2 =
       preferredEntry -
-      riskDistance * 2.5;
+      riskDistance *
+        2.5;
 
     takeProfit3 =
       preferredEntry -
-      riskDistance * 4;
+      riskDistance *
+        4;
   }
 
-  // ==========================================
-  // NO TRADE
-  // ==========================================
+  /* =======================================================
+     NO TRADE
+     ======================================================= */
 
   if (
-    direction === "NO_TRADE"
+    direction ===
+    "NO_TRADE"
   ) {
     entryLow =
       Math.max(
         0,
         close -
-          atrSafe * 0.25
+          atrSafe *
+            0.25
       );
 
     entryHigh =
       close +
-      atrSafe * 0.25;
+      atrSafe *
+        0.25;
 
     preferredEntry =
       close;
@@ -594,14 +806,16 @@ export function analyze(
       close;
   }
 
-  // ==========================================
-  // RISK MANAGEMENT
-  // ==========================================
+  /* =======================================================
+     RISK MANAGEMENT
+     ======================================================= */
 
   const safeBalance =
     Math.max(
       0,
-      Number.isFinite(balance)
+      Number.isFinite(
+        balance
+      )
         ? balance
         : 1000
     );
@@ -618,7 +832,8 @@ export function analyze(
 
   const riskAmount =
     safeBalance *
-    (safeRiskPercent / 100);
+    (safeRiskPercent /
+      100);
 
   const stopDistance =
     Math.abs(
@@ -628,8 +843,10 @@ export function analyze(
 
   const stopDistancePercent =
     preferredEntry > 0
-      ? (stopDistance /
-          preferredEntry) *
+      ? (
+          stopDistance /
+          preferredEntry
+        ) *
         100
       : 0;
 
@@ -643,15 +860,16 @@ export function analyze(
     positionSize *
     preferredEntry;
 
-  // ==========================================
-  // RISK / REWARD
-  // ==========================================
+  /* =======================================================
+     RISK / REWARD
+     ======================================================= */
 
   let reward = 0;
   let risk = 0;
 
   if (
-    direction === "LONG"
+    direction ===
+    "LONG"
   ) {
     reward =
       takeProfit2 -
@@ -663,7 +881,8 @@ export function analyze(
   }
 
   if (
-    direction === "SHORT"
+    direction ===
+    "SHORT"
   ) {
     reward =
       preferredEntry -
@@ -679,24 +898,27 @@ export function analyze(
       ? reward / risk
       : 0;
 
-  // ==========================================
-  // SIGNAL ID
-  // ==========================================
+  /* =======================================================
+     SIGNAL ID
+     ======================================================= */
 
   const signalId =
     crypto
-      .createHash("sha256")
+      .createHash(
+        "sha256"
+      )
       .update(
         `${symbol}-${last.timestamp}-${direction}-${preferredEntry}`
       )
       .digest("hex")
       .slice(0, 16);
 
-  // ==========================================
-  // STATUS
-  // ==========================================
+  /* =======================================================
+     STATUS
+     ======================================================= */
 
-  let status = "WAIT";
+  let status =
+    "WAIT";
 
   if (
     direction !==
@@ -705,19 +927,45 @@ export function analyze(
     if (
       confidence >= 85
     ) {
-      status = "STRONG";
+      status =
+        "STRONG";
     } else if (
       confidence >= 75
     ) {
-      status = "VALID";
+      status =
+        "VALID";
     } else {
-      status = "WATCH";
+      status =
+        "WATCH";
     }
   }
 
-  // ==========================================
-  // FINAL SIGNAL
-  // ==========================================
+  /* =======================================================
+     STOP LOSS REASON
+     ======================================================= */
+
+  let stopLossReason =
+    "NO_TRADE";
+
+  if (
+    direction ===
+    "LONG"
+  ) {
+    stopLossReason =
+      "ATR_AND_SWING_LOW";
+  }
+
+  if (
+    direction ===
+    "SHORT"
+  ) {
+    stopLossReason =
+      "ATR_AND_SWING_HIGH";
+  }
+
+  /* =======================================================
+     FINAL SIGNAL
+     ======================================================= */
 
   return {
     signal_id:
@@ -753,12 +1001,20 @@ export function analyze(
         2
       ),
 
+    /* =====================================================
+       ENTRY
+       ===================================================== */
+
     entry: {
       low:
-        round(entryLow),
+        round(
+          entryLow
+        ),
 
       high:
-        round(entryHigh),
+        round(
+          entryHigh
+        ),
 
       preferred:
         round(
@@ -772,6 +1028,10 @@ export function analyze(
           : "LIMIT_ZONE",
     },
 
+    /* =====================================================
+       STOP LOSS
+       ===================================================== */
+
     stop_loss: {
       price:
         round(
@@ -783,7 +1043,14 @@ export function analyze(
           stopDistancePercent,
           4
         ),
+
+      reason:
+        stopLossReason,
     },
+
+    /* =====================================================
+       TAKE PROFIT
+       ===================================================== */
 
     take_profit: {
       tp1:
@@ -802,11 +1069,19 @@ export function analyze(
         ),
     },
 
+    /* =====================================================
+       RISK / REWARD
+       ===================================================== */
+
     risk_reward:
       round(
         riskReward,
         2
       ),
+
+    /* =====================================================
+       RISK
+       ===================================================== */
 
     risk: {
       balance:
@@ -840,30 +1115,51 @@ export function analyze(
         ),
     },
 
+    /* =====================================================
+       MARKET
+       ===================================================== */
+
     market: {
       price:
-        round(close),
+        round(
+          close
+        ),
 
       ema20:
-        round(E20),
+        round(
+          E20
+        ),
 
       ema50:
-        round(E50),
+        round(
+          E50
+        ),
 
       ema100:
-        round(E100),
+        round(
+          E100
+        ),
 
       ema200:
-        round(E200),
+        round(
+          E200
+        ),
 
       rsi:
-        round(RSI, 2),
+        round(
+          RSI,
+          2
+        ),
 
       atr:
-        round(ATR),
+        round(
+          ATR
+        ),
 
       macd:
-        round(MACD),
+        round(
+          MACD
+        ),
 
       macd_signal:
         round(
@@ -899,6 +1195,10 @@ export function analyze(
         ),
     },
 
+    /* =====================================================
+       MARKET STRUCTURE
+       ===================================================== */
+
     structure: {
       bullish_bos:
         BOSLong,
@@ -922,6 +1222,10 @@ export function analyze(
           recentLow
         ),
     },
+
+    /* =====================================================
+       TIMESTAMP
+       ===================================================== */
 
     timestamp:
       last.timestamp,
