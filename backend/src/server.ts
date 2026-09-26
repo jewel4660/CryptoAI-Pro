@@ -1,6 +1,10 @@
 import "dotenv/config";
 
-import Fastify from "fastify";
+import Fastify, {
+  FastifyReply,
+  FastifyRequest,
+} from "fastify";
+
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 
@@ -13,6 +17,30 @@ import {
 import { analyze } from "./engine.js";
 
 /* =========================================================
+   TYPES
+========================================================= */
+
+type QueryValue = string | undefined;
+
+interface LimitQuery {
+  limit?: QueryValue;
+}
+
+interface TimeframeQuery {
+  timeframe?: QueryValue;
+}
+
+interface AnalysisQuery {
+  timeframe?: QueryValue;
+  balance?: QueryValue;
+  riskPercent?: QueryValue;
+}
+
+interface SymbolParams {
+  symbol: string;
+}
+
+/* =========================================================
    APP
 ========================================================= */
 
@@ -21,10 +49,34 @@ const app = Fastify({
 });
 
 /* =========================================================
+   CONSTANTS
+========================================================= */
+
+const ALLOWED_TIMEFRAMES = [
+  "1m",
+  "3m",
+  "5m",
+  "15m",
+  "30m",
+  "1h",
+  "2h",
+  "4h",
+  "6h",
+  "12h",
+  "1d",
+  "1w",
+] as const;
+
+type Timeframe =
+  (typeof ALLOWED_TIMEFRAMES)[number];
+
+/* =========================================================
    HELPERS
 ========================================================= */
 
-function getErrorMessage(error: unknown): string {
+function getErrorMessage(
+  error: unknown
+): string {
   if (error instanceof Error) {
     return error.message;
   }
@@ -40,24 +92,46 @@ function getErrorMessage(error: unknown): string {
   }
 }
 
-function normalizeSymbol(value: unknown): string {
-  const raw = decodeURIComponent(String(value ?? "")).trim();
+/* ---------------------------------------------------------
+   SYMBOL NORMALIZER
+--------------------------------------------------------- */
+
+function normalizeSymbol(
+  value: unknown
+): string {
+  const raw = decodeURIComponent(
+    String(value ?? "")
+  )
+    .trim()
+    .toUpperCase();
 
   if (!raw) {
     throw new Error("Symbol is required");
   }
 
-  return raw.includes("/")
-    ? raw.toUpperCase()
-    : raw.toUpperCase().replace(/USDT$/, "/USDT");
+  if (raw.includes("/")) {
+    return raw;
+  }
+
+  if (raw.endsWith("USDT")) {
+    return `${raw.slice(0, -4)}/USDT`;
+  }
+
+  return `${raw}/USDT`;
 }
+
+/* ---------------------------------------------------------
+   LIMIT
+--------------------------------------------------------- */
 
 function getLimit(
   value: unknown,
   defaultValue: number,
   max: number
 ): number {
-  const parsed = Number(value ?? defaultValue);
+  const parsed = Number(
+    value ?? defaultValue
+  );
 
   if (!Number.isFinite(parsed)) {
     return defaultValue;
@@ -65,55 +139,78 @@ function getLimit(
 
   return Math.min(
     max,
-    Math.max(1, Math.floor(parsed))
+    Math.max(
+      1,
+      Math.floor(parsed)
+    )
   );
 }
 
-function getBalance(value: unknown): number {
-  const parsed = Number(value ?? 1000);
+/* ---------------------------------------------------------
+   BALANCE
+--------------------------------------------------------- */
 
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+function getBalance(
+  value: unknown
+): number {
+  const parsed = Number(
+    value ?? 1000
+  );
+
+  if (
+    !Number.isFinite(parsed) ||
+    parsed <= 0
+  ) {
     return 1000;
   }
 
   return parsed;
 }
 
-function getRiskPercent(value: unknown): number {
-  const parsed = Number(value ?? 1);
+/* ---------------------------------------------------------
+   RISK
+--------------------------------------------------------- */
 
-  if (!Number.isFinite(parsed) || parsed <= 0) {
+function getRiskPercent(
+  value: unknown
+): number {
+  const parsed = Number(
+    value ?? 1
+  );
+
+  if (
+    !Number.isFinite(parsed) ||
+    parsed <= 0
+  ) {
     return 1;
   }
 
-  return Math.min(100, parsed);
+  return Math.min(
+    100,
+    parsed
+  );
 }
 
-function getTimeframe(value: unknown): string {
-  const allowedTimeframes = [
-    "1m",
-    "3m",
-    "5m",
-    "15m",
-    "30m",
-    "1h",
-    "2h",
-    "4h",
-    "6h",
-    "12h",
-    "1d",
-    "1w",
-  ];
+/* ---------------------------------------------------------
+   TIMEFRAME
+--------------------------------------------------------- */
 
+function getTimeframe(
+  value: unknown
+): Timeframe {
   const timeframe = String(
     value ?? "15m"
   );
 
-  return allowedTimeframes.includes(
-    timeframe
-  )
-    ? timeframe
-    : "15m";
+  if (
+    ALLOWED_TIMEFRAMES.includes(
+      timeframe as Timeframe
+    )
+  ) {
+    return timeframe as Timeframe;
+  }
+
+  return "15m";
 }
 
 /* =========================================================
@@ -137,24 +234,35 @@ await app.register(rateLimit, {
    HEALTH
 ========================================================= */
 
-app.get("/health", async () => {
-  return {
-    ok: true,
-    service: "CryptoAI Pro",
-    time: new Date().toISOString(),
-  };
-});
+app.get(
+  "/health",
+  async () => {
+    return {
+      ok: true,
+      service: "CryptoAI Pro",
+      version: "1.0.0",
+      time: new Date().toISOString(),
+    };
+  }
+);
 
 /* =========================================================
    MARKETS
 ========================================================= */
 
-app.get(
+app.get<{
+  Querystring: LimitQuery;
+}>(
   "/api/v1/markets",
-  async (req: any, reply) => {
+  async (
+    req: FastifyRequest<{
+      Querystring: LimitQuery;
+    }>,
+    reply: FastifyReply
+  ) => {
     try {
       const limit = getLimit(
-        req.query?.limit,
+        req.query.limit,
         100,
         500
       );
@@ -178,12 +286,16 @@ app.get(
         "Failed to load markets"
       );
 
-      return reply.code(502).send({
-        ok: false,
-        error: "MARKET_DATA_UNAVAILABLE",
-        message:
-          message || "Unable to load markets",
-      });
+      return reply
+        .code(502)
+        .send({
+          ok: false,
+          error:
+            "MARKET_DATA_UNAVAILABLE",
+          message:
+            message ||
+            "Unable to load markets",
+        });
     }
   }
 );
@@ -192,13 +304,21 @@ app.get(
    TICKER
 ========================================================= */
 
-app.get(
+app.get<{
+  Params: SymbolParams;
+}>(
   "/api/v1/ticker/:symbol",
-  async (req: any, reply) => {
+  async (
+    req: FastifyRequest<{
+      Params: SymbolParams;
+    }>,
+    reply: FastifyReply
+  ) => {
     try {
-      const symbol = normalizeSymbol(
-        req.params?.symbol
-      );
+      const symbol =
+        normalizeSymbol(
+          req.params.symbol
+        );
 
       const ticker =
         await getTicker(symbol);
@@ -231,12 +351,16 @@ app.get(
         "Failed to load ticker"
       );
 
-      return reply.code(502).send({
-        ok: false,
-        error: "MARKET_DATA_UNAVAILABLE",
-        message:
-          message || "Unable to load ticker",
-      });
+      return reply
+        .code(502)
+        .send({
+          ok: false,
+          error:
+            "MARKET_DATA_UNAVAILABLE",
+          message:
+            message ||
+            "Unable to load ticker",
+        });
     }
   }
 );
@@ -245,24 +369,38 @@ app.get(
    CANDLES
 ========================================================= */
 
-app.get(
+app.get<{
+  Params: SymbolParams;
+  Querystring: TimeframeQuery &
+    LimitQuery;
+}>(
   "/api/v1/candles/:symbol",
-  async (req: any, reply) => {
+  async (
+    req: FastifyRequest<{
+      Params: SymbolParams;
+      Querystring:
+        TimeframeQuery &
+        LimitQuery;
+    }>,
+    reply: FastifyReply
+  ) => {
     try {
-      const symbol = normalizeSymbol(
-        req.params?.symbol
-      );
+      const symbol =
+        normalizeSymbol(
+          req.params.symbol
+        );
 
       const timeframe =
         getTimeframe(
-          req.query?.timeframe
+          req.query.timeframe
         );
 
-      const limit = getLimit(
-        req.query?.limit,
-        200,
-        1000
-      );
+      const limit =
+        getLimit(
+          req.query.limit,
+          200,
+          1000
+        );
 
       const candles =
         await getCandles(
@@ -289,12 +427,16 @@ app.get(
         "Failed to load candles"
       );
 
-      return reply.code(502).send({
-        ok: false,
-        error: "MARKET_DATA_UNAVAILABLE",
-        message:
-          message || "Unable to load candles",
-      });
+      return reply
+        .code(502)
+        .send({
+          ok: false,
+          error:
+            "MARKET_DATA_UNAVAILABLE",
+          message:
+            message ||
+            "Unable to load candles",
+        });
     }
   }
 );
@@ -303,27 +445,37 @@ app.get(
    ANALYSIS
 ========================================================= */
 
-app.get(
+app.get<{
+  Params: SymbolParams;
+  Querystring: AnalysisQuery;
+}>(
   "/api/v1/analysis/:symbol",
-  async (req: any, reply) => {
+  async (
+    req: FastifyRequest<{
+      Params: SymbolParams;
+      Querystring: AnalysisQuery;
+    }>,
+    reply: FastifyReply
+  ) => {
     try {
-      const symbol = normalizeSymbol(
-        req.params?.symbol
-      );
+      const symbol =
+        normalizeSymbol(
+          req.params.symbol
+        );
 
       const timeframe =
         getTimeframe(
-          req.query?.timeframe
+          req.query.timeframe
         );
 
       const balance =
         getBalance(
-          req.query?.balance
+          req.query.balance
         );
 
       const riskPercent =
         getRiskPercent(
-          req.query?.riskPercent
+          req.query.riskPercent
         );
 
       const candles =
@@ -337,20 +489,24 @@ app.get(
         !candles ||
         candles.length === 0
       ) {
-        return reply.code(404).send({
-          ok: false,
-          error: "NO_MARKET_DATA",
-          message:
-            "No candle data available for this symbol",
-        });
+        return reply
+          .code(404)
+          .send({
+            ok: false,
+            error:
+              "NO_MARKET_DATA",
+            message:
+              "No candle data available for this symbol",
+          });
       }
 
-      const result = analyze(
-        symbol,
-        candles,
-        balance,
-        riskPercent
-      );
+      const result =
+        analyze(
+          symbol,
+          candles,
+          balance,
+          riskPercent
+        );
 
       return {
         ok: true,
@@ -367,12 +523,16 @@ app.get(
         "Analysis failed"
       );
 
-      return reply.code(400).send({
-        ok: false,
-        error: "ANALYSIS_FAILED",
-        message:
-          message || "Analysis failed",
-      });
+      return reply
+        .code(400)
+        .send({
+          ok: false,
+          error:
+            "ANALYSIS_FAILED",
+          message:
+            message ||
+            "Analysis failed",
+        });
     }
   }
 );
@@ -381,27 +541,41 @@ app.get(
    SCANNER
 ========================================================= */
 
-app.get(
+app.get<{
+  Querystring:
+    TimeframeQuery &
+    LimitQuery;
+}>(
   "/api/v1/scanner",
-  async (req: any, reply) => {
+  async (
+    req: FastifyRequest<{
+      Querystring:
+        TimeframeQuery &
+        LimitQuery;
+    }>,
+    reply: FastifyReply
+  ) => {
     try {
-      const limit = getLimit(
-        req.query?.limit,
-        50,
-        500
-      );
+      const limit =
+        getLimit(
+          req.query.limit,
+          50,
+          500
+        );
 
       const timeframe =
         getTimeframe(
-          req.query?.timeframe
+          req.query.timeframe
         );
 
       const symbols =
         await getSymbols(limit);
 
-      const results: any[] = [];
+      const results: unknown[] = [];
 
-      for (const symbol of symbols) {
+      for (
+        const symbol of symbols
+      ) {
         try {
           const candles =
             await getCandles(
@@ -417,12 +591,13 @@ app.get(
             continue;
           }
 
-          const result = analyze(
-            symbol,
-            candles,
-            1000,
-            1
-          );
+          const result =
+            analyze(
+              symbol,
+              candles,
+              1000,
+              1
+            );
 
           results.push(result);
         } catch (error: unknown) {
@@ -436,15 +611,14 @@ app.get(
             },
             "Skipping unavailable symbol"
           );
-
-          // Continue scanning other symbols.
         }
       }
 
       return {
         ok: true,
         requested: limit,
-        scanned: results.length,
+        scanned:
+          results.length,
         timeframe,
         data: results,
       };
@@ -459,12 +633,16 @@ app.get(
         "Scanner failed"
       );
 
-      return reply.code(502).send({
-        ok: false,
-        error: "SCANNER_FAILED",
-        message:
-          message || "Scanner failed",
-      });
+      return reply
+        .code(502)
+        .send({
+          ok: false,
+          error:
+            "SCANNER_FAILED",
+          message:
+            message ||
+            "Scanner failed",
+        });
     }
   }
 );
@@ -474,13 +652,18 @@ app.get(
 ========================================================= */
 
 app.setNotFoundHandler(
-  async (req, reply) => {
-    return reply.code(404).send({
-      ok: false,
-      error: "NOT_FOUND",
-      message:
-        `Route ${req.method}:${req.url} not found`,
-    });
+  async (
+    req,
+    reply
+  ) => {
+    return reply
+      .code(404)
+      .send({
+        ok: false,
+        error: "NOT_FOUND",
+        message:
+          `Route ${req.method}:${req.url} not found`,
+      });
   }
 );
 
@@ -505,30 +688,35 @@ app.setErrorHandler(
     );
 
     const statusCode =
-      typeof error?.statusCode === "number" &&
+      typeof error?.statusCode ===
+        "number" &&
       error.statusCode >= 400 &&
       error.statusCode < 600
         ? error.statusCode
         : 500;
 
-    return reply.code(
-      statusCode
-    ).send({
-      ok: false,
-      error: "SERVER_ERROR",
-      message:
-        message || "Internal server error",
-    });
+    return reply
+      .code(statusCode)
+      .send({
+        ok: false,
+        error:
+          "SERVER_ERROR",
+        message:
+          message ||
+          "Internal server error",
+      });
   }
 );
 
 /* =========================================================
-   START SERVER
+   SERVER CONFIG
 ========================================================= */
 
-const portValue = Number(
-  process.env.PORT ?? 8080
-);
+const portValue =
+  Number(
+    process.env.PORT ??
+      8080
+  );
 
 const port =
   Number.isFinite(portValue) &&
@@ -541,7 +729,7 @@ const host =
   "0.0.0.0";
 
 /* =========================================================
-   START
+   START SERVER
 ========================================================= */
 
 try {
