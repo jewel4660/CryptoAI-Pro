@@ -1,6 +1,9 @@
 import crypto from "node:crypto";
 
-import { Candle, Signal } from "./types.js";
+import {
+  Candle,
+  Signal,
+} from "./types.js";
 
 import {
   ema,
@@ -37,27 +40,25 @@ const round = (
 
   const p = 10 ** digits;
 
-  return (
-    Math.round(x * p) / p
-  );
+  return Math.round(x * p) / p;
 };
 
 const avg = (
-  arr: number[]
+  values: number[]
 ): number => {
   if (
-    !Array.isArray(arr) ||
-    arr.length === 0
+    !Array.isArray(values) ||
+    values.length === 0
   ) {
     return 0;
   }
 
   return (
-    arr.reduce(
+    values.reduce(
       (sum, value) =>
         sum + value,
       0
-    ) / arr.length
+    ) / values.length
   );
 };
 
@@ -120,10 +121,6 @@ export function analyze(
     );
   }
 
-  /* =======================================================
-     LAST CANDLE
-     ======================================================= */
-
   const last =
     data[data.length - 1];
 
@@ -143,7 +140,7 @@ export function analyze(
     last.low;
 
   /* =======================================================
-     CLOSE PRICES
+     CLOSES
      ======================================================= */
 
   const closePrices =
@@ -208,7 +205,7 @@ export function analyze(
     );
 
   /* =======================================================
-     LATEST INDICATOR VALUES
+     LATEST VALUES
      ======================================================= */
 
   const E20 =
@@ -356,11 +353,20 @@ export function analyze(
       : recentLow;
 
   /* =======================================================
-     SCORE
+     SCORES
      ======================================================= */
 
   let longScore = 0;
   let shortScore = 0;
+
+  const longReasons: string[] =
+    [];
+
+  const shortReasons: string[] =
+    [];
+
+  const warnings: string[] =
+    [];
 
   /* =======================================================
      EMA TREND
@@ -368,26 +374,58 @@ export function analyze(
 
   if (close > E20) {
     longScore += 7;
+
+    longReasons.push(
+      "Price above EMA20"
+    );
   } else {
     shortScore += 7;
+
+    shortReasons.push(
+      "Price below EMA20"
+    );
   }
 
   if (E20 > E50) {
     longScore += 8;
+
+    longReasons.push(
+      "EMA20 above EMA50"
+    );
   } else {
     shortScore += 8;
+
+    shortReasons.push(
+      "EMA20 below EMA50"
+    );
   }
 
   if (E50 > E100) {
     longScore += 7;
+
+    longReasons.push(
+      "EMA50 above EMA100"
+    );
   } else {
     shortScore += 7;
+
+    shortReasons.push(
+      "EMA50 below EMA100"
+    );
   }
 
   if (E100 > E200) {
     longScore += 6;
+
+    longReasons.push(
+      "EMA100 above EMA200"
+    );
   } else {
     shortScore += 6;
+
+    shortReasons.push(
+      "EMA100 below EMA200"
+    );
   }
 
   /* =======================================================
@@ -404,8 +442,16 @@ export function analyze(
       vwapValue
     ) {
       longScore += 7;
+
+      longReasons.push(
+        "Price above VWAP"
+      );
     } else {
       shortScore += 7;
+
+      shortReasons.push(
+        "Price below VWAP"
+      );
     }
   }
 
@@ -418,6 +464,10 @@ export function analyze(
     RSI <= 72
   ) {
     longScore += 8;
+
+    longReasons.push(
+      "Bullish RSI zone"
+    );
   }
 
   if (
@@ -425,20 +475,28 @@ export function analyze(
     RSI >= 28
   ) {
     shortScore += 8;
-  }
 
-  /* =======================================================
-     EXTREME RSI PROTECTION
-     ======================================================= */
+    shortReasons.push(
+      "Bearish RSI zone"
+    );
+  }
 
   if (RSI > 78) {
     shortScore += 3;
     longScore -= 3;
+
+    warnings.push(
+      "RSI is extremely overbought"
+    );
   }
 
   if (RSI < 22) {
     longScore += 3;
     shortScore -= 3;
+
+    warnings.push(
+      "RSI is extremely oversold"
+    );
   }
 
   /* =======================================================
@@ -450,8 +508,16 @@ export function analyze(
     MACDSignal
   ) {
     longScore += 9;
+
+    longReasons.push(
+      "MACD bullish crossover"
+    );
   } else {
     shortScore += 9;
+
+    shortReasons.push(
+      "MACD bearish crossover"
+    );
   }
 
   /* =======================================================
@@ -463,8 +529,32 @@ export function analyze(
     BBMiddle
   ) {
     longScore += 4;
+
+    longReasons.push(
+      "Price above Bollinger middle"
+    );
   } else {
     shortScore += 4;
+
+    shortReasons.push(
+      "Price below Bollinger middle"
+    );
+  }
+
+  if (
+    close >= BBUpper
+  ) {
+    warnings.push(
+      "Price near or above upper Bollinger Band"
+    );
+  }
+
+  if (
+    close <= BBLower
+  ) {
+    warnings.push(
+      "Price near or below lower Bollinger Band"
+    );
   }
 
   /* =======================================================
@@ -481,10 +571,18 @@ export function analyze(
 
   if (BOSLong) {
     longScore += 10;
+
+    longReasons.push(
+      "Bullish break of structure"
+    );
   }
 
   if (BOSShort) {
     shortScore += 10;
+
+    shortReasons.push(
+      "Bearish break of structure"
+    );
   }
 
   /* =======================================================
@@ -505,10 +603,18 @@ export function analyze(
 
   if (bullishSweep) {
     longScore += 8;
+
+    longReasons.push(
+      "Bullish liquidity sweep"
+    );
   }
 
   if (bearishSweep) {
     shortScore += 8;
+
+    shortReasons.push(
+      "Bearish liquidity sweep"
+    );
   }
 
   /* =======================================================
@@ -543,8 +649,16 @@ export function analyze(
       last.open
     ) {
       longScore += 5;
+
+      longReasons.push(
+        "Strong bullish volume"
+      );
     } else {
       shortScore += 5;
+
+      shortReasons.push(
+        "Strong bearish volume"
+      );
     }
   }
 
@@ -619,7 +733,7 @@ export function analyze(
     );
 
   /* =======================================================
-     ATR SAFE
+     ATR
      ======================================================= */
 
   const atrSafe =
@@ -850,31 +964,22 @@ export function analyze(
         100
       : 0;
 
-  const positionSize =
+  const quantity =
     stopDistance > 0
       ? riskAmount /
         stopDistance
       : 0;
 
-  const notionalValue =
-    positionSize *
-    preferredEntry;
-
   /* =======================================================
      RISK / REWARD
      ======================================================= */
 
-  let reward = 0;
   let risk = 0;
 
   if (
     direction ===
     "LONG"
   ) {
-    reward =
-      takeProfit2 -
-      preferredEntry;
-
     risk =
       preferredEntry -
       stopLoss;
@@ -884,19 +989,147 @@ export function analyze(
     direction ===
     "SHORT"
   ) {
-    reward =
-      preferredEntry -
-      takeProfit2;
-
     risk =
       stopLoss -
       preferredEntry;
   }
 
-  const riskReward =
+  const tp1Reward =
+    direction === "LONG"
+      ? takeProfit1 -
+        preferredEntry
+      : direction === "SHORT"
+        ? preferredEntry -
+          takeProfit1
+        : 0;
+
+  const tp2Reward =
+    direction === "LONG"
+      ? takeProfit2 -
+        preferredEntry
+      : direction === "SHORT"
+        ? preferredEntry -
+          takeProfit2
+        : 0;
+
+  const tp3Reward =
+    direction === "LONG"
+      ? takeProfit3 -
+        preferredEntry
+      : direction === "SHORT"
+        ? preferredEntry -
+          takeProfit3
+        : 0;
+
+  const rr1 =
     risk > 0
-      ? reward / risk
+      ? tp1Reward / risk
       : 0;
+
+  const rr2 =
+    risk > 0
+      ? tp2Reward / risk
+      : 0;
+
+  const rr3 =
+    risk > 0
+      ? tp3Reward / risk
+      : 0;
+
+  /* =======================================================
+     MARKET REGIME
+     ======================================================= */
+
+  let marketRegime =
+    "RANGING";
+
+  const bullishTrend =
+    E20 > E50 &&
+    E50 > E100 &&
+    E100 > E200;
+
+  const bearishTrend =
+    E20 < E50 &&
+    E50 < E100 &&
+    E100 < E200;
+
+  if (bullishTrend) {
+    marketRegime =
+      "BULLISH_TREND";
+  } else if (
+    bearishTrend
+  ) {
+    marketRegime =
+      "BEARISH_TREND";
+  } else if (
+    Math.abs(
+      close - BBMiddle
+    ) >
+    atrSafe
+  ) {
+    marketRegime =
+      "VOLATILE";
+  }
+
+  /* =======================================================
+     REASONS
+     ======================================================= */
+
+  let reasons: string[];
+
+  if (
+    direction ===
+    "LONG"
+  ) {
+    reasons =
+      longReasons.slice(
+        0,
+        10
+      );
+  } else if (
+    direction ===
+    "SHORT"
+  ) {
+    reasons =
+      shortReasons.slice(
+        0,
+        10
+      );
+  } else {
+    reasons = [
+      "No sufficiently strong directional setup",
+      "Long and short scores are not sufficiently separated",
+    ];
+  }
+
+  /* =======================================================
+     ADD GENERAL WARNINGS
+     ======================================================= */
+
+  if (
+    volumeRatio < 0.7
+  ) {
+    warnings.push(
+      "Trading volume is below average"
+    );
+  }
+
+  if (
+    confidence < 70
+  ) {
+    warnings.push(
+      "Signal confidence is relatively low"
+    );
+  }
+
+  if (
+    direction ===
+    "NO_TRADE"
+  ) {
+    warnings.push(
+      "No trade setup confirmed"
+    );
+  }
 
   /* =======================================================
      SIGNAL ID
@@ -911,7 +1144,10 @@ export function analyze(
         `${symbol}-${last.timestamp}-${direction}-${preferredEntry}`
       )
       .digest("hex")
-      .slice(0, 16);
+      .slice(
+        0,
+        16
+      );
 
   /* =======================================================
      STATUS
@@ -962,6 +1198,19 @@ export function analyze(
     stopLossReason =
       "ATR_AND_SWING_HIGH";
   }
+
+  /* =======================================================
+     CREATED / EXPIRES
+     ======================================================= */
+
+  const createdAt =
+    new Date();
+
+  const expiresAt =
+    new Date(
+      createdAt.getTime() +
+        60 * 60 * 1000
+    );
 
   /* =======================================================
      FINAL SIGNAL
@@ -1070,26 +1319,34 @@ export function analyze(
     },
 
     /* =====================================================
-       RISK / REWARD
+       RISK REWARD
        ===================================================== */
 
-    risk_reward:
-      round(
-        riskReward,
-        2
-      ),
-
-    /* =====================================================
-       RISK
-       ===================================================== */
-
-    risk: {
-      balance:
+    risk_reward: {
+      tp1:
         round(
-          safeBalance,
+          rr1,
           2
         ),
 
+      tp2:
+        round(
+          rr2,
+          2
+        ),
+
+      tp3:
+        round(
+          rr3,
+          2
+        ),
+    },
+
+    /* =====================================================
+       POSITION
+       ===================================================== */
+
+    position: {
       risk_percent:
         round(
           safeRiskPercent,
@@ -1102,132 +1359,46 @@ export function analyze(
           2
         ),
 
-      position_size:
+      quantity:
         round(
-          positionSize,
+          quantity,
           8
         ),
 
-      notional_value:
-        round(
-          notionalValue,
-          2
-        ),
+      leverage: 1,
     },
 
     /* =====================================================
-       MARKET
+       MARKET REGIME
        ===================================================== */
 
-    market: {
-      price:
-        round(
-          close
-        ),
-
-      ema20:
-        round(
-          E20
-        ),
-
-      ema50:
-        round(
-          E50
-        ),
-
-      ema100:
-        round(
-          E100
-        ),
-
-      ema200:
-        round(
-          E200
-        ),
-
-      rsi:
-        round(
-          RSI,
-          2
-        ),
-
-      atr:
-        round(
-          ATR
-        ),
-
-      macd:
-        round(
-          MACD
-        ),
-
-      macd_signal:
-        round(
-          MACDSignal
-        ),
-
-      vwap:
-        round(
-          vwapValue
-        ),
-
-      bollinger: {
-        upper:
-          round(
-            BBUpper
-          ),
-
-        middle:
-          round(
-            BBMiddle
-          ),
-
-        lower:
-          round(
-            BBLower
-          ),
-      },
-
-      volume_ratio:
-        round(
-          volumeRatio,
-          2
-        ),
-    },
+    market_regime:
+      marketRegime,
 
     /* =====================================================
-       MARKET STRUCTURE
+       REASONS
        ===================================================== */
 
-    structure: {
-      bullish_bos:
-        BOSLong,
-
-      bearish_bos:
-        BOSShort,
-
-      bullish_liquidity_sweep:
-        bullishSweep,
-
-      bearish_liquidity_sweep:
-        bearishSweep,
-
-      recent_high:
-        round(
-          recentHigh
-        ),
-
-      recent_low:
-        round(
-          recentLow
-        ),
-    },
+    reasons,
 
     /* =====================================================
-       TIMESTAMP
+       WARNINGS
        ===================================================== */
 
-    timestamp:
-      last.timestamp,
+    warnings,
+
+    /* =====================================================
+       CREATED
+       ===================================================== */
+
+    created_at:
+      createdAt.toISOString(),
+
+    /* =====================================================
+       EXPIRES
+       ===================================================== */
+
+    expires_at:
+      expiresAt.toISOString(),
   };
 }
