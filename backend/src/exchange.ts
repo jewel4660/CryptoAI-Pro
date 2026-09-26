@@ -1,4 +1,5 @@
-import ccxt from "ccxt";
+const BINANCE_BASE_URL =
+  "https://data-api.binance.vision";
 
 export type Candle = {
   timestamp: number;
@@ -22,12 +23,35 @@ export type TickerData = {
   quoteVolume: number;
 };
 
-const exchange = new ccxt.binance({
-  enableRateLimit: true,
-  options: {
-    defaultType: "future",
-  },
-});
+/* ================================
+   HELPERS
+================================ */
+
+function normalizeSymbol(symbol: string): string {
+  return symbol
+    .replace("/", "")
+    .replace("-", "")
+    .replace("_", "")
+    .toUpperCase();
+}
+
+async function binanceRequest<T>(
+  endpoint: string
+): Promise<T> {
+  const response = await fetch(
+    `${BINANCE_BASE_URL}${endpoint}`
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+
+    throw new Error(
+      `Binance API error ${response.status}: ${text}`
+    );
+  }
+
+  return (await response.json()) as T;
+}
 
 /* ================================
    GET SYMBOLS
@@ -36,31 +60,34 @@ const exchange = new ccxt.binance({
 export async function getSymbols(
   limit: number = 100
 ): Promise<string[]> {
-  await exchange.loadMarkets();
+  type ExchangeInfo = {
+    symbols?: Array<{
+      symbol?: string;
+      status?: string;
+      quoteAsset?: string;
+      isSpotTradingAllowed?: boolean;
+    }>;
+  };
 
-  const markets = exchange.markets ?? {};
-
-  const symbols = Object.values(markets)
-    .filter((market: any) => {
-      return (
-        market &&
-        market.active !== false &&
-        market.quote === "USDT" &&
-        (
-          market.type === "swap" ||
-          market.contract === true ||
-          market.linear === true
-        )
-      );
-    })
-    .map((market: any) => market.symbol)
-    .filter(
-      (symbol: unknown): symbol is string =>
-        typeof symbol === "string" &&
-        symbol.length > 0
+  const data =
+    await binanceRequest<ExchangeInfo>(
+      "/api/v3/exchangeInfo"
     );
 
-  return [...new Set(symbols)].slice(
+  const symbols = (data.symbols ?? [])
+    .filter((item) => {
+      return (
+        item.status === "TRADING" &&
+        item.quoteAsset === "USDT"
+      );
+    })
+    .map((item) => item.symbol)
+    .filter(
+      (symbol): symbol is string =>
+        typeof symbol === "string"
+    );
+
+  return symbols.slice(
     0,
     Math.max(1, limit)
   );
@@ -75,32 +102,46 @@ export async function getCandles(
   timeframe: string = "15m",
   limit: number = 200
 ): Promise<Candle[]> {
-  const rows = await exchange.fetchOHLCV(
-    symbol,
-    timeframe,
-    undefined,
-    limit
+  const cleanSymbol =
+    normalizeSymbol(symbol);
+
+  const safeLimit = Math.min(
+    Math.max(1, limit),
+    1000
   );
 
-  return rows
-    .filter(
-      (row): row is [
-        number,
-        number,
-        number,
-        number,
-        number,
-        number
-      ] => row.length >= 6
-    )
-    .map((row) => ({
-      timestamp: Number(row[0]),
-      open: Number(row[1]),
-      high: Number(row[2]),
-      low: Number(row[3]),
-      close: Number(row[4]),
-      volume: Number(row[5]),
-    }));
+  type Kline = [
+    number,
+    string,
+    string,
+    string,
+    string,
+    string,
+    number,
+    string,
+    number,
+    string,
+    string,
+    string
+  ];
+
+  const rows =
+    await binanceRequest<Kline[]>(
+      `/api/v3/klines?symbol=${encodeURIComponent(
+        cleanSymbol
+      )}&interval=${encodeURIComponent(
+        timeframe
+      )}&limit=${safeLimit}`
+    );
+
+  return rows.map((row) => ({
+    timestamp: Number(row[0]),
+    open: Number(row[1]),
+    high: Number(row[2]),
+    low: Number(row[3]),
+    close: Number(row[4]),
+    volume: Number(row[5]),
+  }));
 }
 
 /* ================================
@@ -110,41 +151,63 @@ export async function getCandles(
 export async function getTicker(
   symbol: string
 ): Promise<TickerData> {
-  const ticker = await exchange.fetchTicker(symbol);
+  const cleanSymbol =
+    normalizeSymbol(symbol);
+
+  type BinanceTicker = {
+    symbol?: string;
+    priceChangePercent?: string;
+    lastPrice?: string;
+    bidPrice?: string;
+    askPrice?: string;
+    highPrice?: string;
+    lowPrice?: string;
+    volume?: string;
+    quoteVolume?: string;
+    closeTime?: number;
+  };
+
+  const ticker =
+    await binanceRequest<BinanceTicker>(
+      `/api/v3/ticker/24hr?symbol=${encodeURIComponent(
+        cleanSymbol
+      )}`
+    );
 
   return {
-    symbol,
+    symbol:
+      ticker.symbol ?? cleanSymbol,
 
     timestamp: Number(
-      ticker.timestamp ?? Date.now()
+      ticker.closeTime ?? Date.now()
     ),
 
     last: Number(
-      ticker.last ?? 0
+      ticker.lastPrice ?? 0
     ),
 
     bid: Number(
-      ticker.bid ?? 0
+      ticker.bidPrice ?? 0
     ),
 
     ask: Number(
-      ticker.ask ?? 0
+      ticker.askPrice ?? 0
     ),
 
     high: Number(
-      ticker.high ?? 0
+      ticker.highPrice ?? 0
     ),
 
     low: Number(
-      ticker.low ?? 0
+      ticker.lowPrice ?? 0
     ),
 
     volume: Number(
-      ticker.baseVolume ?? 0
+      ticker.volume ?? 0
     ),
 
     percentage: Number(
-      ticker.percentage ?? 0
+      ticker.priceChangePercent ?? 0
     ),
 
     quoteVolume: Number(
@@ -160,11 +223,22 @@ export async function getTicker(
 export async function getPrice(
   symbol: string
 ): Promise<number> {
-  const ticker = await exchange.fetchTicker(symbol);
+  const cleanSymbol =
+    normalizeSymbol(symbol);
+
+  type PriceResponse = {
+    symbol?: string;
+    price?: string;
+  };
+
+  const data =
+    await binanceRequest<PriceResponse>(
+      `/api/v3/ticker/price?symbol=${encodeURIComponent(
+        cleanSymbol
+      )}`
+    );
 
   return Number(
-    ticker.last ?? 0
+    data.price ?? 0
   );
 }
-
-export default exchange;
