@@ -24,15 +24,11 @@ export type TickerData = {
 
 const exchange = new ccxt.binance({
   enableRateLimit: true,
-
   options: {
     defaultType: "future",
   },
 });
 
-/**
- * Get Binance USDT futures symbols
- */
 export async function getSymbols(
   limit: number = 100
 ): Promise<string[]> {
@@ -45,20 +41,24 @@ export async function getSymbols(
       return (
         market.active !== false &&
         market.quote === "USDT" &&
-        (market.type === "swap" ||
+        (
+          market.type === "swap" ||
           market.contract === true ||
-          market.linear === true)
+          market.linear === true
+        )
       );
     })
     .map((market: any) => market.symbol)
-    .filter((symbol): symbol is string => Boolean(symbol));
+    .filter(
+      (symbol): symbol is string => Boolean(symbol)
+    );
 
-  return [...new Set(symbols)].slice(0, Math.max(1, limit));
+  return [...new Set(symbols)].slice(
+    0,
+    Math.max(1, limit)
+  );
 }
 
-/**
- * Get OHLCV candles
- */
 export async function getCandles(
   symbol: string,
   timeframe: string = "15m",
@@ -68,7 +68,8 @@ export async function getCandles(
     symbol,
     timeframe,
     undefined,
-    limit
+    limit,
+    {}
   );
 
   return rows
@@ -83,13 +84,13 @@ export async function getCandles(
     }));
 }
 
-/**
- * Get 24h ticker
- */
 export async function getTicker(
   symbol: string
 ): Promise<TickerData> {
-  const ticker = await exchange.fetchTicker(symbol);
+  const ticker = await exchange.fetchTicker(
+    symbol,
+    {}
+  );
 
   return {
     symbol,
@@ -132,13 +133,13 @@ export async function getTicker(
   };
 }
 
-/**
- * Get current price
- */
 export async function getPrice(
   symbol: string
 ): Promise<number> {
-  const ticker = await exchange.fetchTicker(symbol);
+  const ticker = await exchange.fetchTicker(
+    symbol,
+    {}
+  );
 
   return Number(
     ticker.last ?? 0
