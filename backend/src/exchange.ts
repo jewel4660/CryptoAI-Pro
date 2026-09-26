@@ -29,16 +29,21 @@ const exchange = new ccxt.binance({
   },
 });
 
+/* ================================
+   GET SYMBOLS
+================================ */
+
 export async function getSymbols(
   limit: number = 100
 ): Promise<string[]> {
   await exchange.loadMarkets();
 
-  const markets = Object.values(exchange.markets);
+  const markets = exchange.markets ?? {};
 
-  const symbols = markets
+  const symbols = Object.values(markets)
     .filter((market: any) => {
       return (
+        market &&
         market.active !== false &&
         market.quote === "USDT" &&
         (
@@ -50,7 +55,9 @@ export async function getSymbols(
     })
     .map((market: any) => market.symbol)
     .filter(
-      (symbol): symbol is string => Boolean(symbol)
+      (symbol: unknown): symbol is string =>
+        typeof symbol === "string" &&
+        symbol.length > 0
     );
 
   return [...new Set(symbols)].slice(
@@ -58,6 +65,10 @@ export async function getSymbols(
     Math.max(1, limit)
   );
 }
+
+/* ================================
+   GET CANDLES
+================================ */
 
 export async function getCandles(
   symbol: string,
@@ -68,12 +79,20 @@ export async function getCandles(
     symbol,
     timeframe,
     undefined,
-    limit,
-    {}
+    limit
   );
 
   return rows
-    .filter((row) => row.length >= 6)
+    .filter(
+      (row): row is [
+        number,
+        number,
+        number,
+        number,
+        number,
+        number
+      ] => row.length >= 6
+    )
     .map((row) => ({
       timestamp: Number(row[0]),
       open: Number(row[1]),
@@ -84,13 +103,14 @@ export async function getCandles(
     }));
 }
 
+/* ================================
+   GET TICKER
+================================ */
+
 export async function getTicker(
   symbol: string
 ): Promise<TickerData> {
-  const ticker = await exchange.fetchTicker(
-    symbol,
-    {}
-  );
+  const ticker = await exchange.fetchTicker(symbol);
 
   return {
     symbol,
@@ -133,13 +153,14 @@ export async function getTicker(
   };
 }
 
+/* ================================
+   GET CURRENT PRICE
+================================ */
+
 export async function getPrice(
   symbol: string
 ): Promise<number> {
-  const ticker = await exchange.fetchTicker(
-    symbol,
-    {}
-  );
+  const ticker = await exchange.fetchTicker(symbol);
 
   return Number(
     ticker.last ?? 0
