@@ -35,8 +35,7 @@ const round = (
   value: number,
   decimals = 2
 ): number => {
-  const factor =
-    10 ** decimals;
+  const factor = 10 ** decimals;
 
   return (
     Math.round(
@@ -92,7 +91,10 @@ export function analyze(
      VALIDATION
   ======================================================= */
 
-  if (!Array.isArray(c) || c.length < 220) {
+  if (
+    !Array.isArray(c) ||
+    c.length < 220
+  ) {
     throw new Error(
       "INSUFFICIENT_DATA"
     );
@@ -104,13 +106,14 @@ export function analyze(
       ? balance
       : 1000;
 
-  const validRiskPercent = clamp(
-    Number.isFinite(riskPercent)
-      ? riskPercent
-      : 1,
-    0.1,
-    MAX_RISK_PERCENT
-  );
+  const validRiskPercent =
+    clamp(
+      Number.isFinite(riskPercent)
+        ? riskPercent
+        : 1,
+      0.1,
+      MAX_RISK_PERCENT
+    );
 
   /* =======================================================
      MARKET DATA
@@ -124,16 +127,23 @@ export function analyze(
   const previous =
     c[c.length - 2];
 
-  if (!last || !previous) {
+  if (
+    !last ||
+    !previous
+  ) {
     throw new Error(
       "INVALID_MARKET_DATA"
     );
   }
 
   const currentPrice =
-    safeNumber(last.close);
+    safeNumber(
+      last.close
+    );
 
-  if (currentPrice <= 0) {
+  if (
+    currentPrice <= 0
+  ) {
     throw new Error(
       "INVALID_PRICE"
     );
@@ -143,38 +153,48 @@ export function analyze(
      INDICATORS
   ======================================================= */
 
-  const e20 = safeNumber(
-    ema(v, 20)
-  );
+  const e20 =
+    safeNumber(
+      ema(v, 20)
+    );
 
-  const e50 = safeNumber(
-    ema(v, 50)
-  );
+  const e50 =
+    safeNumber(
+      ema(v, 50)
+    );
 
-  const e200 = safeNumber(
-    ema(v, 200)
-  );
+  const e200 =
+    safeNumber(
+      ema(v, 200)
+    );
 
-  const rrsi = safeNumber(
-    rsi(v),
-    50
-  );
+  const rrsi =
+    safeNumber(
+      rsi(v),
+      50
+    );
 
-  const aatr = Math.max(
-    safeNumber(atr(c)),
-    currentPrice * 0.001
-  );
+  const aatr =
+    Math.max(
+      safeNumber(
+        atr(c)
+      ),
+      currentPrice * 0.001
+    );
 
-  const mm = safeNumber(
-    macd(v)
-  );
+  const mm =
+    safeNumber(
+      macd(v)
+    );
 
-  const vw = safeNumber(
-    vwap(c),
-    currentPrice
-  );
+  const vw =
+    safeNumber(
+      vwap(c),
+      currentPrice
+    );
 
-  const bb = bollinger(v);
+  const bb =
+    bollinger(v);
 
   /* =======================================================
      MARKET STRUCTURE
@@ -332,14 +352,18 @@ export function analyze(
   let longScore = 50;
   let shortScore = 50;
 
-  const longReasons: string[] = [];
-  const shortReasons: string[] = [];
+  const longReasons: string[] =
+    [];
+
+  const shortReasons: string[] =
+    [];
 
   /* =======================================================
      TREND SCORE
   ======================================================= */
 
   if (bullishTrend) {
+
     longScore += 14;
 
     longReasons.push(
@@ -348,6 +372,7 @@ export function analyze(
   }
 
   if (bearishTrend) {
+
     shortScore += 14;
 
     shortReasons.push(
@@ -360,6 +385,7 @@ export function analyze(
   ======================================================= */
 
   if (bullishRSI) {
+
     longScore += 7;
 
     longReasons.push(
@@ -368,6 +394,7 @@ export function analyze(
   }
 
   if (bearishRSI) {
+
     shortScore += 7;
 
     shortReasons.push(
@@ -380,6 +407,7 @@ export function analyze(
   ======================================================= */
 
   if (bullishMACD) {
+
     longScore += 7;
 
     longReasons.push(
@@ -388,6 +416,7 @@ export function analyze(
   }
 
   if (bearishMACD) {
+
     shortScore += 7;
 
     shortReasons.push(
@@ -400,6 +429,7 @@ export function analyze(
   ======================================================= */
 
   if (aboveVWAP) {
+
     longScore += 5;
 
     longReasons.push(
@@ -408,6 +438,7 @@ export function analyze(
   }
 
   if (belowVWAP) {
+
     shortScore += 5;
 
     shortReasons.push(
@@ -420,6 +451,7 @@ export function analyze(
   ======================================================= */
 
   if (breakout) {
+
     longScore += 12;
 
     longReasons.push(
@@ -428,6 +460,7 @@ export function analyze(
   }
 
   if (breakdown) {
+
     shortScore += 12;
 
     shortReasons.push(
@@ -440,6 +473,7 @@ export function analyze(
   ======================================================= */
 
   if (volumeExpansion) {
+
     longScore += 4;
     shortScore += 4;
 
@@ -453,6 +487,7 @@ export function analyze(
   }
 
   if (strongVolume) {
+
     longScore += 3;
     shortScore += 3;
 
@@ -470,6 +505,7 @@ export function analyze(
   ======================================================= */
 
   if (belowLowerBB) {
+
     longScore += 4;
 
     longReasons.push(
@@ -478,6 +514,7 @@ export function analyze(
   }
 
   if (aboveUpperBB) {
+
     shortScore += 4;
 
     shortReasons.push(
@@ -490,6 +527,7 @@ export function analyze(
   ======================================================= */
 
   if (RSI_OVERBOUGHT) {
+
     longScore -= 8;
 
     longReasons.push(
@@ -498,6 +536,7 @@ export function analyze(
   }
 
   if (RSI_OVERSOLD) {
+
     shortScore -= 8;
 
     shortReasons.push(
@@ -514,6 +553,7 @@ export function analyze(
     aboveVWAP &&
     bullishMACD
   ) {
+
     longScore += 5;
 
     longReasons.push(
@@ -526,6 +566,7 @@ export function analyze(
     belowVWAP &&
     bearishMACD
   ) {
+
     shortScore += 5;
 
     shortReasons.push(
@@ -537,13 +578,19 @@ export function analyze(
      FINAL SCORES
   ======================================================= */
 
-  longScore = clamp(
-    Math.round(longScore)
-  );
+  longScore =
+    clamp(
+      Math.round(
+        longScore
+      )
+    );
 
-  shortScore = clamp(
-    Math.round(shortScore)
-  );
+  shortScore =
+    clamp(
+      Math.round(
+        shortScore
+      )
+    );
 
   const directionGap =
     Math.abs(
@@ -563,16 +610,23 @@ export function analyze(
 
   if (
     longScore >= MIN_SCORE &&
-    longScore - shortScore >=
+    longScore -
+      shortScore >=
       MIN_DIRECTION_GAP
   ) {
-    direction = "LONG";
+
+    direction =
+      "LONG";
+
   } else if (
     shortScore >= MIN_SCORE &&
-    shortScore - longScore >=
+    shortScore -
+      longScore >=
       MIN_DIRECTION_GAP
   ) {
-    direction = "SHORT";
+
+    direction =
+      "SHORT";
   }
 
   /* =======================================================
@@ -587,7 +641,8 @@ export function analyze(
     );
 
   const minimumDistance =
-    currentPrice * 0.005;
+    currentPrice *
+    0.005;
 
   const baseDistance =
     Math.max(
@@ -618,33 +673,34 @@ export function analyze(
   let stopDistance =
     baseDistance;
 
-  if (direction === "LONG") {
+  /* =======================================================
+     LONG STOP LOSS
+  ======================================================= */
 
-    /*
-     * Put SL below recent structure
-     * plus ATR buffer.
-     */
+  if (
+    direction === "LONG"
+  ) {
+
     const structureSL =
       swingLow -
       aatr * 0.25;
 
-    stopLoss = Math.min(
-      currentPrice -
-        baseDistance,
-      structureSL
-    );
+    stopLoss =
+      Math.min(
+        currentPrice -
+          baseDistance,
+        structureSL
+      );
 
     stopDistance =
       currentPrice -
       stopLoss;
 
-    /*
-     * Avoid absurdly large SL.
-     */
     if (
       stopDistance >
       currentPrice * 0.08
     ) {
+
       stopLoss =
         currentPrice -
         baseDistance;
@@ -665,33 +721,34 @@ export function analyze(
       currentPrice;
   }
 
-  if (direction === "SHORT") {
+  /* =======================================================
+     SHORT STOP LOSS
+  ======================================================= */
 
-    /*
-     * Put SL above recent structure
-     * plus ATR buffer.
-     */
+  if (
+    direction === "SHORT"
+  ) {
+
     const structureSL =
       swingHigh +
       aatr * 0.25;
 
-    stopLoss = Math.max(
-      currentPrice +
-        baseDistance,
-      structureSL
-    );
+    stopLoss =
+      Math.max(
+        currentPrice +
+          baseDistance,
+        structureSL
+      );
 
     stopDistance =
       stopLoss -
       currentPrice;
 
-    /*
-     * Avoid absurdly large SL.
-     */
     if (
       stopDistance >
       currentPrice * 0.08
     ) {
+
       stopLoss =
         currentPrice +
         baseDistance;
@@ -716,7 +773,9 @@ export function analyze(
      NO TRADE
   ======================================================= */
 
-  if (direction === "NO_TRADE") {
+  if (
+    direction === "NO_TRADE"
+  ) {
 
     const score =
       Math.max(
@@ -728,9 +787,9 @@ export function analyze(
       clamp(
         Math.round(
           50 +
-            directionGap * 1.5 +
-            (score - 50) *
-              0.35
+          directionGap * 1.5 +
+          (score - 50) *
+            0.35
         ),
         0,
         95
@@ -740,15 +799,16 @@ export function analyze(
       clamp(
         Math.round(
           50 +
-            directionGap * 1.2 +
-            (score - 50) *
-              0.2
+          directionGap * 1.2 +
+          (score - 50) *
+            0.2
         ),
         50,
         90
       );
 
     return {
+
       signal_id:
         crypto.randomUUID(),
 
@@ -771,50 +831,72 @@ export function analyze(
       probability_estimate:
         probability,
 
-      /*
-       * Keep current price visible,
-       * but don't create fake SL/TP.
-       */
       entry: {
-        low: round(
-          currentPrice -
-            aatr * 0.25
-        ),
 
-        high: round(
-          currentPrice +
+        low:
+          round(
+            currentPrice -
             aatr * 0.25
-        ),
+          ),
+
+        high:
+          round(
+            currentPrice +
+            aatr * 0.25
+          ),
 
         preferred:
-          round(currentPrice),
+          round(
+            currentPrice
+          ),
 
-        type: "MARKET",
+        type:
+          "MARKET",
       },
 
       stop_loss: {
-        price:
-          round(currentPrice),
 
-        distance_percent: 0,
+        price:
+          round(
+            currentPrice
+          ),
+
+        distance_percent:
+          0,
 
         reason:
           "No trade setup validated",
       },
 
       take_profit: {
-        tp1: round(currentPrice),
-        tp2: round(currentPrice),
-        tp3: round(currentPrice),
+
+        tp1:
+          round(
+            currentPrice
+          ),
+
+        tp2:
+          round(
+            currentPrice
+          ),
+
+        tp3:
+          round(
+            currentPrice
+          ),
       },
 
       risk_reward: {
+
         tp1: 0,
+
         tp2: 0,
+
         tp3: 0,
       },
 
       position: {
+
         risk_percent:
           validRiskPercent,
 
@@ -836,4 +918,334 @@ export function analyze(
             : "RANGING",
 
       reasons: [
-        ...(
+        "No trade setup validated",
+
+        ...(longScore >= shortScore
+          ? longReasons
+          : shortReasons),
+      ],
+    };
+  }
+
+  /* =======================================================
+     RISK AMOUNT
+  ======================================================= */
+
+  const riskAmount =
+    validBalance *
+    (
+      validRiskPercent /
+      100
+    );
+
+  /* =======================================================
+     VALIDATE STOP DISTANCE
+  ======================================================= */
+
+  if (
+    !Number.isFinite(
+      stopDistance
+    ) ||
+    stopDistance <= 0
+  ) {
+
+    stopDistance =
+      baseDistance;
+  }
+
+  /* =======================================================
+     TAKE PROFIT
+  ======================================================= */
+
+  let tp1 =
+    currentPrice;
+
+  let tp2 =
+    currentPrice;
+
+  let tp3 =
+    currentPrice;
+
+  if (
+    direction === "LONG"
+  ) {
+
+    tp1 =
+      preferredEntry +
+      stopDistance * 1.0;
+
+    tp2 =
+      preferredEntry +
+      stopDistance * 2.0;
+
+    tp3 =
+      preferredEntry +
+      stopDistance *
+      Math.max(
+        3.0,
+        MIN_RR + 1
+      );
+  }
+
+  if (
+    direction === "SHORT"
+  ) {
+
+    tp1 =
+      preferredEntry -
+      stopDistance * 1.0;
+
+    tp2 =
+      preferredEntry -
+      stopDistance * 2.0;
+
+    tp3 =
+      preferredEntry -
+      stopDistance *
+      Math.max(
+        3.0,
+        MIN_RR + 1
+      );
+  }
+
+  /* =======================================================
+     RISK / REWARD
+  ======================================================= */
+
+  const rr1 =
+    stopDistance > 0
+      ? Math.abs(
+          tp1 -
+          preferredEntry
+        ) /
+        stopDistance
+      : 0;
+
+  const rr2 =
+    stopDistance > 0
+      ? Math.abs(
+          tp2 -
+          preferredEntry
+        ) /
+        stopDistance
+      : 0;
+
+  const rr3 =
+    stopDistance > 0
+      ? Math.abs(
+          tp3 -
+          preferredEntry
+        ) /
+        stopDistance
+      : 0;
+
+  /* =======================================================
+     POSITION SIZE
+  ======================================================= */
+
+  const quantity =
+    stopDistance > 0
+      ? riskAmount /
+        stopDistance
+      : 0;
+
+  /*
+   * Signal engine only.
+   * No automatic order execution.
+   */
+  const leverage =
+    1;
+
+  /* =======================================================
+     CONFIDENCE
+  ======================================================= */
+
+  const winningScore =
+    Math.max(
+      longScore,
+      shortScore
+    );
+
+  const confidence =
+    clamp(
+      Math.round(
+        50 +
+        directionGap * 1.5 +
+        (winningScore - 50) *
+          0.35
+      ),
+      0,
+      95
+    );
+
+  const probability =
+    clamp(
+      Math.round(
+        50 +
+        directionGap * 1.2 +
+        (winningScore - 50) *
+          0.2
+      ),
+      50,
+      95
+    );
+
+  /* =======================================================
+     MARKET REGIME
+  ======================================================= */
+
+  const marketRegime =
+    bullishTrend
+      ? "TRENDING_BULLISH"
+      : bearishTrend
+        ? "TRENDING_BEARISH"
+        : ranging
+          ? "RANGING"
+          : "RANGING";
+
+  /* =======================================================
+     REASONS
+  ======================================================= */
+
+  const reasons =
+    direction === "LONG"
+      ? longReasons
+      : shortReasons;
+
+  /* =======================================================
+     FINAL SIGNAL
+  ======================================================= */
+
+  return {
+
+    signal_id:
+      crypto.randomUUID(),
+
+    symbol,
+
+    direction,
+
+    status:
+      "ACTIVE",
+
+    long_score:
+      longScore,
+
+    short_score:
+      shortScore,
+
+    confidence,
+
+    probability_estimate:
+      probability,
+
+    entry: {
+
+      low:
+        round(
+          entryLow
+        ),
+
+      high:
+        round(
+          entryHigh
+        ),
+
+      preferred:
+        round(
+          preferredEntry
+        ),
+
+      type:
+        "MARKET",
+    },
+
+    stop_loss: {
+
+      price:
+        round(
+          stopLoss
+        ),
+
+      distance_percent:
+        round(
+          (
+            stopDistance /
+            currentPrice
+          ) * 100
+        ),
+
+      reason:
+        direction === "LONG"
+          ? "Below recent swing structure with ATR buffer"
+          : "Above recent swing structure with ATR buffer",
+    },
+
+    take_profit: {
+
+      tp1:
+        round(
+          tp1
+        ),
+
+      tp2:
+        round(
+          tp2
+        ),
+
+      tp3:
+        round(
+          tp3
+        ),
+    },
+
+    risk_reward: {
+
+      tp1:
+        round(
+          rr1
+        ),
+
+      tp2:
+        round(
+          rr2
+        ),
+
+      tp3:
+        round(
+          rr3
+        ),
+    },
+
+    position: {
+
+      risk_percent:
+        validRiskPercent,
+
+      risk_amount:
+        round(
+          riskAmount
+        ),
+
+      quantity:
+        round(
+          quantity,
+          6
+        ),
+
+      leverage,
+    },
+
+    market_regime:
+      marketRegime,
+
+    reasons:
+      reasons.length > 0
+        ? reasons
+        : [
+            direction === "LONG"
+              ? "Bullish setup validated"
+              : "Bearish setup validated",
+          ],
+  };
+}
