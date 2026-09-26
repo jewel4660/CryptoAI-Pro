@@ -1,244 +1,391 @@
-const BINANCE_BASE_URL =
-  "https://data-api.binance.vision";
+// src/api/Exchange.ts
+// CryptoAI Pro - Live Render API
 
-export type Candle = {
+const API_BASE_URL =
+  "https://cryptoai-pro-hux0.onrender.com";
+
+export type Direction =
+  | "LONG"
+  | "SHORT"
+  | "NO_TRADE";
+
+export interface HealthResponse {
+  ok: boolean;
+  service: string;
+  time: string;
+}
+
+export interface MarketResponse {
+  ok: boolean;
+  data: string[];
+  count: number;
+}
+
+export interface TickerData {
+  symbol: string;
+  last: number | null;
+  bid: number | null;
+  ask: number | null;
+  high: number | null;
+  low: number | null;
+  percentage: number | null;
+  quoteVolume: number | null;
+  timestamp: number | null;
+}
+
+export interface TickerResponse {
+  ok: boolean;
+  data: TickerData;
+}
+
+export interface Candle {
   timestamp: number;
   open: number;
   high: number;
   low: number;
   close: number;
   volume: number;
-};
+}
 
-export type TickerData = {
+export interface CandlesResponse {
+  ok: boolean;
+  data: Candle[];
   symbol: string;
-  timestamp: number;
-  last: number;
-  bid: number;
-  ask: number;
-  high: number;
-  low: number;
-  volume: number;
-  percentage: number;
-  quoteVolume: number;
-};
-
-/* ================================
-   HELPERS
-================================ */
-
-function normalizeSymbol(symbol: string): string {
-  return symbol
-    .replace("/", "")
-    .replace("-", "")
-    .replace("_", "")
-    .toUpperCase();
+  timeframe: string;
+  count: number;
 }
 
-async function binanceRequest<T>(
-  endpoint: string
-): Promise<T> {
-  const response = await fetch(
-    `${BINANCE_BASE_URL}${endpoint}`
-  );
+export interface AnalysisResult {
+  signal_id?: string;
+  symbol: string;
+  direction: Direction;
+  status?: string;
 
-  if (!response.ok) {
-    const text = await response.text();
+  long_score?: number;
+  short_score?: number;
+  confidence?: number;
+  probability_estimate?: number;
 
-    throw new Error(
-      `Binance API error ${response.status}: ${text}`
-    );
-  }
+  entry?: number;
+  entry_low?: number;
+  entry_high?: number;
 
-  return (await response.json()) as T;
-}
-
-/* ================================
-   GET SYMBOLS
-================================ */
-
-export async function getSymbols(
-  limit: number = 100
-): Promise<string[]> {
-  type ExchangeInfo = {
-    symbols?: Array<{
-      symbol?: string;
-      status?: string;
-      quoteAsset?: string;
-      isSpotTradingAllowed?: boolean;
-    }>;
+  stop_loss?: {
+    price?: number;
+    distance_percent?: number;
+    reason?: string;
   };
 
-  const data =
-    await binanceRequest<ExchangeInfo>(
-      "/api/v3/exchangeInfo"
-    );
+  take_profit?: {
+    tp1?: number;
+    tp2?: number;
+    tp3?: number;
+  };
 
-  const symbols = (data.symbols ?? [])
-    .filter((item) => {
-      return (
-        item.status === "TRADING" &&
-        item.quoteAsset === "USDT"
+  risk_reward?: number;
+  risk_amount?: number;
+  position_size?: number;
+  leverage?: number;
+
+  market_regime?: string;
+
+  reasoning?: string;
+  reasons?: string[];
+  warnings?: string[];
+
+  created_at?: string;
+  expires_at?: string;
+
+  [key: string]: unknown;
+}
+
+export interface AnalysisResponse {
+  ok: boolean;
+  data: AnalysisResult;
+}
+
+export interface ScannerResponse {
+  ok: boolean;
+  requested: number;
+  scanned: number;
+  timeframe: string;
+  data: AnalysisResult[];
+}
+
+/* =========================================================
+   API ERROR
+========================================================= */
+
+export class ApiError extends Error {
+  status: number;
+  details?: unknown;
+
+  constructor(
+    message: string,
+    status: number,
+    details?: unknown
+  ) {
+    super(message);
+
+    this.name = "ApiError";
+    this.status = status;
+    this.details = details;
+  }
+}
+
+/* =========================================================
+   HELPERS
+========================================================= */
+
+function normalizeSymbol(symbol: string): string {
+  let value = symbol.trim().toUpperCase();
+
+  if (value.includes("/")) {
+    return value;
+  }
+
+  if (value.endsWith("USDT")) {
+    return value.replace(/USDT$/, "/USDT");
+  }
+
+  return `${value}/USDT`;
+}
+
+async function request<T>(
+  endpoint: string,
+  options?: RequestInit
+): Promise<T> {
+  const url = `${API_BASE_URL}${endpoint}`;
+
+  const controller =
+    new AbortController();
+
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 30000);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(options?.headers ?? {}),
+      },
+      signal: controller.signal,
+    });
+
+    const text =
+      await response.text();
+
+    let json: unknown = null;
+
+    try {
+      json = text
+        ? JSON.parse(text)
+        : null;
+    } catch {
+      json = null;
+    }
+
+    if (!response.ok) {
+      const message =
+        typeof json === "object" &&
+        json !== null &&
+        "message" in json &&
+        typeof (
+          json as { message?: unknown }
+        ).message === "string"
+          ? (json as { message: string })
+              .message
+          : `API request failed (${response.status})`;
+
+      throw new ApiError(
+        message,
+        response.status,
+        json
       );
-    })
-    .map((item) => item.symbol)
-    .filter(
-      (symbol): symbol is string =>
-        typeof symbol === "string"
-    );
+    }
 
-  return symbols.slice(
-    0,
-    Math.max(1, limit)
+    return json as T;
+  } catch (error: unknown) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (
+      error instanceof Error &&
+      error.name === "AbortError"
+    ) {
+      throw new ApiError(
+        "Request timeout. Render server may be waking up.",
+        408
+      );
+    }
+
+    if (error instanceof Error) {
+      throw new ApiError(
+        error.message,
+        0
+      );
+    }
+
+    throw new ApiError(
+      "Network request failed",
+      0,
+      error
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/* =========================================================
+   HEALTH
+========================================================= */
+
+export async function getHealth(): Promise<HealthResponse> {
+  return request<HealthResponse>(
+    "/health"
   );
 }
 
-/* ================================
-   GET CANDLES
-================================ */
+/* =========================================================
+   MARKETS
+========================================================= */
 
-export async function getCandles(
-  symbol: string,
-  timeframe: string = "15m",
-  limit: number = 200
-): Promise<Candle[]> {
-  const cleanSymbol =
-    normalizeSymbol(symbol);
-
+export async function getMarkets(
+  limit = 100
+): Promise<MarketResponse> {
   const safeLimit = Math.min(
-    Math.max(1, limit),
-    1000
+    500,
+    Math.max(1, Math.floor(limit))
   );
 
-  type Kline = [
-    number,
-    string,
-    string,
-    string,
-    string,
-    string,
-    number,
-    string,
-    number,
-    string,
-    string,
-    string
-  ];
-
-  const rows =
-    await binanceRequest<Kline[]>(
-      `/api/v3/klines?symbol=${encodeURIComponent(
-        cleanSymbol
-      )}&interval=${encodeURIComponent(
-        timeframe
-      )}&limit=${safeLimit}`
-    );
-
-  return rows.map((row) => ({
-    timestamp: Number(row[0]),
-    open: Number(row[1]),
-    high: Number(row[2]),
-    low: Number(row[3]),
-    close: Number(row[4]),
-    volume: Number(row[5]),
-  }));
+  return request<MarketResponse>(
+    `/api/v1/markets?limit=${safeLimit}`
+  );
 }
 
-/* ================================
-   GET TICKER
-================================ */
+/* =========================================================
+   TICKER
+========================================================= */
 
 export async function getTicker(
   symbol: string
-): Promise<TickerData> {
-  const cleanSymbol =
+): Promise<TickerResponse> {
+  const normalized =
     normalizeSymbol(symbol);
 
-  type BinanceTicker = {
-    symbol?: string;
-    priceChangePercent?: string;
-    lastPrice?: string;
-    bidPrice?: string;
-    askPrice?: string;
-    highPrice?: string;
-    lowPrice?: string;
-    volume?: string;
-    quoteVolume?: string;
-    closeTime?: number;
-  };
-
-  const ticker =
-    await binanceRequest<BinanceTicker>(
-      `/api/v3/ticker/24hr?symbol=${encodeURIComponent(
-        cleanSymbol
-      )}`
-    );
-
-  return {
-    symbol:
-      ticker.symbol ?? cleanSymbol,
-
-    timestamp: Number(
-      ticker.closeTime ?? Date.now()
-    ),
-
-    last: Number(
-      ticker.lastPrice ?? 0
-    ),
-
-    bid: Number(
-      ticker.bidPrice ?? 0
-    ),
-
-    ask: Number(
-      ticker.askPrice ?? 0
-    ),
-
-    high: Number(
-      ticker.highPrice ?? 0
-    ),
-
-    low: Number(
-      ticker.lowPrice ?? 0
-    ),
-
-    volume: Number(
-      ticker.volume ?? 0
-    ),
-
-    percentage: Number(
-      ticker.priceChangePercent ?? 0
-    ),
-
-    quoteVolume: Number(
-      ticker.quoteVolume ?? 0
-    ),
-  };
-}
-
-/* ================================
-   GET CURRENT PRICE
-================================ */
-
-export async function getPrice(
-  symbol: string
-): Promise<number> {
-  const cleanSymbol =
-    normalizeSymbol(symbol);
-
-  type PriceResponse = {
-    symbol?: string;
-    price?: string;
-  };
-
-  const data =
-    await binanceRequest<PriceResponse>(
-      `/api/v3/ticker/price?symbol=${encodeURIComponent(
-        cleanSymbol
-      )}`
-    );
-
-  return Number(
-    data.price ?? 0
+  return request<TickerResponse>(
+    `/api/v1/ticker/${encodeURIComponent(
+      normalized
+    )}`
   );
 }
+
+/* =========================================================
+   CANDLES
+========================================================= */
+
+export async function getCandles(
+  symbol: string,
+  timeframe = "15m",
+  limit = 200
+): Promise<CandlesResponse> {
+  const normalized =
+    normalizeSymbol(symbol);
+
+  const safeLimit = Math.min(
+    1000,
+    Math.max(1, Math.floor(limit))
+  );
+
+  return request<CandlesResponse>(
+    `/api/v1/candles/${encodeURIComponent(
+      normalized
+    )}?timeframe=${encodeURIComponent(
+      timeframe
+    )}&limit=${safeLimit}`
+  );
+}
+
+/* =========================================================
+   ANALYSIS
+========================================================= */
+
+export async function getAnalysis(
+  symbol: string,
+  timeframe = "15m",
+  balance = 1000,
+  riskPercent = 1
+): Promise<AnalysisResponse> {
+  const normalized =
+    normalizeSymbol(symbol);
+
+  const params = new URLSearchParams({
+    timeframe,
+    balance: String(balance),
+    riskPercent: String(riskPercent),
+  });
+
+  return request<AnalysisResponse>(
+    `/api/v1/analysis/${encodeURIComponent(
+      normalized
+    )}?${params.toString()}`
+  );
+}
+
+/* =========================================================
+   SCANNER
+========================================================= */
+
+export async function getScanner(
+  limit = 50,
+  timeframe = "15m"
+): Promise<ScannerResponse> {
+  const safeLimit = Math.min(
+    500,
+    Math.max(1, Math.floor(limit))
+  );
+
+  const params = new URLSearchParams({
+    limit: String(safeLimit),
+    timeframe,
+  });
+
+  return request<ScannerResponse>(
+    `/api/v1/scanner?${params.toString()}`
+  );
+}
+
+/* =========================================================
+   CONNECTION TEST
+========================================================= */
+
+export async function testConnection(): Promise<boolean> {
+  try {
+    const result =
+      await getHealth();
+
+    return result.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+/* =========================================================
+   DEFAULT EXPORT
+========================================================= */
+
+const Exchange = {
+  getHealth,
+  getMarkets,
+  getTicker,
+  getCandles,
+  getAnalysis,
+  getScanner,
+  testConnection,
+};
+
+export default Exchange;
