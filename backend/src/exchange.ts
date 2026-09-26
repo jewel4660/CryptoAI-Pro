@@ -1,68 +1,62 @@
 import ccxt from "ccxt";
-import { Candle } from "./types.js";
 
-export const exchange = new ccxt.binance({
+export type Candle = {
+  timestamp: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+};
+
+const exchange = new ccxt.binance({
   enableRateLimit: true,
   options: {
-    defaultType: "spot",
+    defaultType: "future",
   },
 });
 
-/**
- * Get top USDT spot symbols by quote volume.
- * Maximum 500 symbols.
- */
-export async function getSymbols(limit = 500): Promise<string[]> {
-  const markets = await exchange.loadMarkets();
-
-  return Object.values(markets)
-    .filter(
-      (market: any) =>
-        market.active === true &&
-        market.spot === true &&
-        market.quote === "USDT"
-    )
-    .sort(
-      (a: any, b: any) =>
-        Number(b.info?.quoteVolume ?? 0) -
-        Number(a.info?.quoteVolume ?? 0)
-    )
-    .slice(0, Math.min(500, Math.max(1, limit)))
-    .map((market: any) => market.symbol);
-}
-
-/**
- * Get ticker information.
- */
-export async function getTicker(symbol: string) {
-  return exchange.fetchTicker(symbol);
-}
-
-/**
- * Get OHLCV candles and convert them to our Candle type.
- */
 export async function getCandles(
   symbol: string,
-  timeframe = "15m",
-  limit = 300
+  timeframe: string = "15m",
+  limit: number = 200
 ): Promise<Candle[]> {
-  const safeLimit = Math.min(1000, Math.max(50, limit));
-
   const rows = await exchange.fetchOHLCV(
     symbol,
     timeframe,
     undefined,
-    safeLimit
+    limit
   );
 
   return rows
-    .filter((row) => Array.isArray(row) && row.length >= 6)
-    .map((row): Candle => ({
-      timestamp: Number(row[0]),
-      open: Number(row[1]),
-      high: Number(row[2]),
-      low: Number(row[3]),
-      close: Number(row[4]),
-      volume: Number(row[5]),
+    .filter((r) => r.length >= 6)
+    .map((r) => ({
+      timestamp: Number(r[0]),
+      open: Number(r[1]),
+      high: Number(r[2]),
+      low: Number(r[3]),
+      close: Number(r[4]),
+      volume: Number(r[5]),
     }));
 }
+
+export async function getTicker(symbol: string) {
+  const ticker = await exchange.fetchTicker(symbol);
+
+  return {
+    symbol,
+    last: Number(ticker.last ?? 0),
+    bid: Number(ticker.bid ?? 0),
+    ask: Number(ticker.ask ?? 0),
+    high: Number(ticker.high ?? 0),
+    low: Number(ticker.low ?? 0),
+    volume: Number(ticker.baseVolume ?? 0),
+  };
+}
+
+export async function getPrice(symbol: string): Promise<number> {
+  const ticker = await exchange.fetchTicker(symbol);
+  return Number(ticker.last ?? 0);
+}
+
+export default exchange;
