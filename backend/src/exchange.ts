@@ -1,6 +1,12 @@
 // src/exchange.ts
 
-const BINANCE_BASE_URL = "https://api.binance.com";
+const BINANCE_BASE_URLS = [
+  "https://api.binance.com",
+  "https://api1.binance.com",
+  "https://api2.binance.com",
+  "https://api3.binance.com",
+  "https://api4.binance.com",
+];
 
 /* =========================================================
    TYPES
@@ -17,19 +23,14 @@ export interface Candle {
 
 export interface Ticker {
   symbol: string;
-
   price: number;
   last: number;
-
   bid: number;
   ask: number;
-
   high: number;
   low: number;
-
   percentage: number;
   quoteVolume: number;
-
   timestamp: number;
 }
 
@@ -37,11 +38,67 @@ export interface Ticker {
    HELPERS
 ========================================================= */
 
-function normalizeBinanceSymbol(symbol: string): string {
+function normalizeBinanceSymbol(
+  symbol: string
+): string {
   return String(symbol)
     .trim()
     .toUpperCase()
     .replace("/", "");
+}
+
+/**
+ * Request Binance with fallback hosts.
+ */
+async function binanceFetch(
+  path: string
+): Promise<Response> {
+  let lastStatus = 0;
+  let lastError = "Unknown Binance error";
+
+  for (const baseUrl of BINANCE_BASE_URLS) {
+    try {
+      const response = await fetch(
+        `${baseUrl}${path}`
+      );
+
+      if (response.ok) {
+        return response;
+      }
+
+      lastStatus = response.status;
+      lastError = `Binance HTTP ${response.status}`;
+
+      /*
+       * Try another Binance host for common
+       * temporary / regional failures.
+       */
+      if (
+        response.status === 429 ||
+        response.status === 451 ||
+        response.status >= 500
+      ) {
+        continue;
+      }
+
+      /*
+       * For other HTTP errors, stop immediately.
+       */
+      return response;
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        lastError = error.message;
+      } else {
+        lastError = String(error);
+      }
+
+      continue;
+    }
+  }
+
+  throw new Error(
+    `${lastError}${lastStatus ? ` (${lastStatus})` : ""}`
+  );
 }
 
 /* =========================================================
@@ -51,8 +108,8 @@ function normalizeBinanceSymbol(symbol: string): string {
 export async function getSymbols(
   limit?: number
 ): Promise<string[]> {
-  const response = await fetch(
-    `${BINANCE_BASE_URL}/api/v3/exchangeInfo`
+  const response = await binanceFetch(
+    "/api/v3/exchangeInfo"
   );
 
   if (!response.ok) {
@@ -61,14 +118,15 @@ export async function getSymbols(
     );
   }
 
-  const data = (await response.json()) as {
-    symbols?: Array<{
-      symbol: string;
-      status: string;
-      quoteAsset: string;
-      isSpotTradingAllowed?: boolean;
-    }>;
-  };
+  const data =
+    (await response.json()) as {
+      symbols?: Array<{
+        symbol: string;
+        status: string;
+        quoteAsset: string;
+        isSpotTradingAllowed?: boolean;
+      }>;
+    };
 
   let symbols = (data.symbols ?? [])
     .filter(
@@ -77,17 +135,19 @@ export async function getSymbols(
         item.quoteAsset === "USDT" &&
         item.isSpotTradingAllowed !== false
     )
-    .map((item) => item.symbol);
+    .map(
+      (item) => item.symbol
+    );
 
-  /*
-   * Apply limit only when supplied.
-   */
   if (
     typeof limit === "number" &&
     Number.isFinite(limit) &&
     limit > 0
   ) {
-    symbols = symbols.slice(0, Math.floor(limit));
+    symbols = symbols.slice(
+      0,
+      Math.floor(limit)
+    );
   }
 
   return symbols;
@@ -109,11 +169,13 @@ export async function getTicker(
     );
   }
 
-  const response = await fetch(
-    `${BINANCE_BASE_URL}/api/v3/ticker/24hr?symbol=${encodeURIComponent(
+  const path =
+    `/api/v3/ticker/24hr?symbol=${encodeURIComponent(
       binanceSymbol
-    )}`
-  );
+    )}`;
+
+  const response =
+    await binanceFetch(path);
 
   if (!response.ok) {
     throw new Error(
@@ -121,21 +183,21 @@ export async function getTicker(
     );
   }
 
-  const data = (await response.json()) as {
-    symbol: string;
-    lastPrice: string;
-    bidPrice: string;
-    askPrice: string;
-    highPrice: string;
-    lowPrice: string;
-    priceChangePercent: string;
-    quoteVolume: string;
-    closeTime: number;
-  };
+  const data =
+    (await response.json()) as {
+      symbol: string;
+      lastPrice: string;
+      bidPrice: string;
+      askPrice: string;
+      highPrice: string;
+      lowPrice: string;
+      priceChangePercent: string;
+      quoteVolume: string;
+      closeTime: number;
+    };
 
-  const last = Number(
-    data.lastPrice
-  );
+  const last =
+    Number(data.lastPrice);
 
   return {
     symbol: data.symbol,
@@ -143,11 +205,21 @@ export async function getTicker(
     price: last,
     last,
 
-    bid: Number(data.bidPrice),
-    ask: Number(data.askPrice),
+    bid: Number(
+      data.bidPrice
+    ),
 
-    high: Number(data.highPrice),
-    low: Number(data.lowPrice),
+    ask: Number(
+      data.askPrice
+    ),
+
+    high: Number(
+      data.highPrice
+    ),
+
+    low: Number(
+      data.lowPrice
+    ),
 
     percentage: Number(
       data.priceChangePercent
@@ -181,18 +253,19 @@ export async function getCandles(
     );
   }
 
-  const safeLimit = Math.min(
-    1000,
-    Math.max(
-      1,
-      Math.floor(
-        Number(limit) || 200
+  const safeLimit =
+    Math.min(
+      1000,
+      Math.max(
+        1,
+        Math.floor(
+          Number(limit) || 200
+        )
       )
-    )
-  );
+    );
 
-  const url =
-    `${BINANCE_BASE_URL}/api/v3/klines` +
+  const path =
+    `/api/v3/klines` +
     `?symbol=${encodeURIComponent(
       binanceSymbol
     )}` +
@@ -202,7 +275,7 @@ export async function getCandles(
     `&limit=${safeLimit}`;
 
   const response =
-    await fetch(url);
+    await binanceFetch(path);
 
   if (!response.ok) {
     throw new Error(
